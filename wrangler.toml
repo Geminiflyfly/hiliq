@@ -1,0 +1,12 @@
+# Hiliq / Cloudflare Pages
+name = "hiliq"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "public"
+
+# Local: npx wrangler pages dev
+# Bind R2 in Dashboard as BUCKET, or:
+#   wrangler pages dev public --r2=BUCKET=<your-bucket>
+
+[vars]
+# UPLOAD_TOKEN = "change-me"
+# CDN_URL = "https://img.example.com"

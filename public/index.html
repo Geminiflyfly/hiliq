@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Hiliq — 基于 Cloudflare Pages + R2 的轻量无服务器图床" />
+  <title>Hiliq · 轻量图床</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Syne', 'sans-serif'],
+            sans: ['Sora', 'sans-serif'],
+          },
+          colors: {
+            ink: {
+              950: '#0B1F1C',
+              800: '#163A34',
+              600: '#2A5C52',
+              400: '#5A8A7E',
+              200: '#B7D0C8',
+              50: '#F3F7F5',
+            },
+            tide: {
+              500: '#1F8A70',
+              400: '#2BA88A',
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body class="font-sans text-ink-950 antialiased">
+  <div class="atmosphere" aria-hidden="true"></div>
+
+  <header class="relative z-20">
+    <nav class="mx-auto flex max-w-5xl items-center justify-between px-5 py-5 sm:px-8">
+      <a href="#top" class="font-display text-lg font-800 tracking-tight text-ink-950">Hiliq</a>
+      <div class="flex items-center gap-1 text-sm" role="tablist" aria-label="视图切换">
+        <button
+          type="button"
+          id="tab-upload"
+          role="tab"
+          aria-selected="true"
+          class="tab-btn is-active"
+          data-view="upload"
+        >上传</button>
+        <button
+          type="button"
+          id="tab-gallery"
+          role="tab"
+          aria-selected="false"
+          class="tab-btn"
+          data-view="gallery"
+        >画廊</button>
+        <button
+          type="button"
+          id="btn-settings"
+          class="tab-btn"
+          title="令牌设置"
+          aria-label="打开令牌设置"
+        >设置</button>
+      </div>
+    </nav>
+  </header>
+
+  <main id="top" class="relative z-10">
+    <!-- Upload view -->
+    <section id="view-upload" class="view is-visible" aria-labelledby="hero-brand">
+      <div class="mx-auto max-w-5xl px-5 pb-16 pt-6 sm:px-8 sm:pt-10">
+        <div class="hero-stage">
+          <p id="hero-brand" class="font-display text-5xl font-800 leading-none tracking-tight text-ink-950 sm:text-7xl md:text-8xl">
+            Hiliq
+          </p>
+          <h1 class="mt-5 max-w-xl text-xl font-medium leading-snug text-ink-800 sm:text-2xl">
+            把图片托到这里，立刻拿到可分享的链接
+          </h1>
+          <p class="mt-3 max-w-md text-sm leading-relaxed text-ink-600 sm:text-base">
+            支持拖拽、点击选择与剪贴板粘贴。边缘上传至 Cloudflare R2，无需服务器。
+          </p>
+
+          <div class="mt-10">
+            <label
+              id="dropzone"
+              for="file-input"
+              class="dropzone group"
+              tabindex="0"
+            >
+              <input
+                id="file-input"
+                type="file"
+                accept="image/*"
+                multiple
+                class="sr-only"
+              />
+              <span class="dropzone-ring" aria-hidden="true"></span>
+              <span class="relative z-10 flex flex-col items-start gap-2">
+                <span class="text-sm font-semibold uppercase tracking-[0.18em] text-tide-500">上传图片</span>
+                <span class="text-lg font-medium text-ink-950 sm:text-xl">拖入文件，或点击选择</span>
+                <span class="text-sm text-ink-400">也可直接 <kbd class="kbd">Ctrl</kbd> / <kbd class="kbd">⌘</kbd> + <kbd class="kbd">V</kbd> 粘贴</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div id="upload-progress" class="mt-6 hidden" aria-live="polite"></div>
+        <div id="upload-results" class="mt-10 space-y-6" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <!-- Gallery view -->
+    <section id="view-gallery" class="view" hidden aria-labelledby="gallery-title">
+      <div class="mx-auto max-w-5xl px-5 pb-20 pt-6 sm:px-8 sm:pt-10">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 id="gallery-title" class="font-display text-4xl font-800 tracking-tight text-ink-950 sm:text-5xl">画廊</h2>
+            <p class="mt-2 text-sm text-ink-600">浏览已上传图片，复制链接或删除。</p>
+          </div>
+          <button type="button" id="btn-refresh" class="btn-ghost">刷新</button>
+        </div>
+
+        <div id="gallery-status" class="mt-6 text-sm text-ink-400" aria-live="polite">加载中…</div>
+        <div id="gallery-grid" class="gallery-grid mt-8"></div>
+        <div class="mt-10 flex justify-center">
+          <button type="button" id="btn-more" class="btn-primary hidden">加载更多</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="relative z-10 border-t border-ink-200/60">
+    <div class="mx-auto flex max-w-5xl flex-col gap-2 px-5 py-8 text-xs text-ink-400 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <span>Hiliq · Cloudflare Pages + R2</span>
+      <span>单页 · 无打包 · 边缘上传</span>
+    </div>
+  </footer>
+
+  <!-- Settings panel -->
+  <div id="settings-overlay" class="overlay" hidden>
+    <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <h3 id="settings-title" class="font-display text-2xl font-800 text-ink-950">访问令牌</h3>
+      <p class="mt-2 text-sm leading-relaxed text-ink-600">
+        若已在 Pages 环境变量中设置 <code class="code">UPLOAD_TOKEN</code>，请在此填写相同令牌。保存在本机浏览器，不会上传到第三方。
+      </p>
+      <label class="mt-6 block text-xs font-semibold uppercase tracking-wider text-ink-400" for="token-input">Upload Token</label>
+      <input
+        id="token-input"
+        type="password"
+        autocomplete="off"
+        class="field mt-2"
+        placeholder="留空表示未启用鉴权"
+      />
+      <div class="mt-6 flex flex-wrap gap-3">
+        <button type="button" id="btn-save-token" class="btn-primary">保存</button>
+        <button type="button" id="btn-clear-token" class="btn-ghost">清除</button>
+        <button type="button" id="btn-close-settings" class="btn-ghost ml-auto">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="./app.js" type="module"></script>
+</body>
+</html>
