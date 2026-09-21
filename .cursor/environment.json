@@ -1,0 +1,11 @@
+{
+  "name": "Hiliq (Cloudflare Pages + R2)",
+  "install": "npm install",
+  "terminals": [
+    {
+      "name": "wrangler-dev",
+      "command": "npm run dev"
+    }
+  ],
+  "ports": [8788]
+}
