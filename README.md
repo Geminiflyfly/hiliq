@@ -74,16 +74,25 @@ npx wrangler pages dev public --r2=BUCKET=hiliq-images --binding UPLOAD_TOKEN=yo
    - **Framework preset**：None
    - **Build command**：留空
    - **Build output directory**：`public`
-3. 在项目 **Settings → Bindings** 中添加：
-   - **R2 bucket**：变量名必须为 `BUCKET`，选择你的桶。
-4. 在 **Settings → Environment variables** 中按需添加：
+3. **R2 绑定**：本项目通过根目录 `wrangler.toml` 管理绑定（控制台「绑定」页会提示无法手动添加）。  
+   打开仓库里的 `wrangler.toml`，把 `bucket_name` 改成你的 R2 桶名：
+
+   ```toml
+   [[r2_buckets]]
+   binding = "BUCKET"
+   bucket_name = "你的桶名"
+   ```
+
+   提交并推送后，Pages 会自动带上该绑定。绑定页里应能看到 `BUCKET`。
+
+4. 在 **Settings → Variables and Secrets**（变量和机密）中按需添加：
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
 | `UPLOAD_TOKEN` | 否 | 上传 / 列表 / 删除鉴权令牌。未设置则接口开放（仅建议内网或临时试用）。 |
 | `CDN_URL` | 否 | 图片外链前缀，例如 `https://img.example.com`。未设置时使用 `https://你的域名/img/<key>`。 |
 
-5. 保存后重新部署。
+5. 保存后重新部署（Redeploy）。
 
 ### 方式 B：Wrangler 直接发布
 

@@ -3,10 +3,14 @@ name = "hiliq"
 compatibility_date = "2024-11-01"
 pages_build_output_dir = "public"
 
-# Local: npx wrangler pages dev
-# Bind R2 in Dashboard as BUCKET, or:
-#   wrangler pages dev public --r2=BUCKET=<your-bucket>
+# R2 绑定：binding 名必须是 BUCKET（代码里用 env.BUCKET）
+# bucket_name 改成你在 Cloudflare R2 里实际创建的桶名
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "hiliq-images"
 
+# 可选：上传鉴权令牌（生产环境建议设置）
+# 也可在 Pages 控制台 → 设置 → 变量和机密 中配置
 [vars]
 # UPLOAD_TOKEN = "change-me"
 # CDN_URL = "https://img.example.com"
