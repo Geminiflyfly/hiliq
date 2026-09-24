@@ -19,6 +19,7 @@ const els = {
   fileInput: document.getElementById('file-input'),
   uploadFolder: document.getElementById('upload-folder'),
   galleryFolder: document.getElementById('gallery-folder'),
+  galleryKind: document.getElementById('gallery-kind'),
   btnNewFolder: document.getElementById('btn-new-folder'),
   btnNewSubfolder: document.getElementById('btn-new-subfolder'),
   btnRefreshFolders: document.getElementById('btn-refresh-folders'),
@@ -30,6 +31,11 @@ const els = {
   results: document.getElementById('upload-results'),
   galleryGrid: document.getElementById('gallery-grid'),
   galleryStatus: document.getElementById('gallery-status'),
+  batchBar: document.getElementById('batch-bar'),
+  batchSelectAll: document.getElementById('batch-select-all'),
+  batchCount: document.getElementById('batch-count'),
+  btnBatchMove: document.getElementById('btn-batch-move'),
+  btnBatchDelete: document.getElementById('btn-batch-delete'),
   btnMore: document.getElementById('btn-more'),
   btnRefresh: document.getElementById('btn-refresh'),
   btnAuth: document.getElementById('btn-auth'),
@@ -67,6 +73,8 @@ const state = {
   folderItems: [],
   uploadFolder: '',
   galleryFolder: '',
+  galleryKind: '',
+  selectedKeys: new Set(),
 };
 
 async function api(path, options = {}) {
@@ -226,7 +234,7 @@ function fillFolderSelects(preferredUpload) {
   }
 
   if (els.galleryFolder) {
-    els.galleryFolder.innerHTML = `<option value="">全部</option>${optionsHtml}`;
+    els.galleryFolder.innerHTML = `<option value="">全部文件夹</option>${optionsHtml}`;
     if (galleryVal && [...els.galleryFolder.options].some((o) => o.value === galleryVal)) {
       els.galleryFolder.value = galleryVal;
     }
@@ -502,13 +510,21 @@ function renderResult(data) {
     ['HTML', formats.html],
     ['BBCode', formats.bbcode],
   ];
+  const isImage = (data.kind || 'image') === 'image';
+  const thumb = isImage
+    ? `<img class="result-thumb" src="${escapeAttr(formats.url)}" alt="" loading="lazy" />`
+    : `<div class="result-thumb file-card result-file-card">
+         <span class="file-card-kind">${escapeHtml(data.kindLabel || data.kind || '文件')}</span>
+         <span class="file-card-name">${escapeHtml(data.originalName || data.key || '')}</span>
+       </div>`;
 
   item.innerHTML = `
-    <img class="result-thumb" src="${escapeAttr(formats.url)}" alt="" loading="lazy" />
+    ${thumb}
     <div>
       <p class="text-sm text-ink-600 mb-3">
         <span class="font-medium text-ink-950">${escapeHtml(data.key || '')}</span>
         ${data.folder ? ` · <span class="text-tide-500">${escapeHtml(data.folder)}</span>` : ''}
+        ${data.kindLabel ? `<span class="kind-pill">${escapeHtml(data.kindLabel)}</span>` : ''}
         ${data.size != null ? ` · ${formatSize(data.size)}` : ''}
       </p>
       <div class="result-links">
@@ -546,17 +562,13 @@ function setProgress(visible, percent = 0, label = '') {
 }
 
 async function uploadFile(file) {
-  if (!file.type.startsWith('image/')) {
-    showToast(`已跳过非图片：${file.name || 'unknown'}`);
-    return;
-  }
   if (!(await ensureAuthed())) return;
 
   const form = new FormData();
-  form.append('file', file, file.name || 'image');
+  form.append('file', file, file.name || 'file');
   const folder = getSelectedUploadFolder();
   if (folder) form.append('folder', folder);
-  setProgress(true, 15, `正在上传 ${file.name || '图片'}${folder ? ` → ${folder}` : ''}…`);
+  setProgress(true, 15, `正在上传 ${file.name || '文件'}${folder ? ` → ${folder}` : ''}…`);
   els.dropzone.classList.add('is-busy');
 
   try {
@@ -570,7 +582,7 @@ async function uploadFile(file) {
     renderResult(data);
     showToast(folder ? `已上传到 ${folder}` : '上传成功');
     state.galleryLoaded = false;
-    if (folder && !state.folders.includes(folder)) {
+    if (folder) {
       rememberFolder(folder);
       fillFolderSelects(folder);
     }
@@ -629,38 +641,93 @@ async function handlePaste(e) {
   await uploadFiles(images);
 }
 
+function updateBatchBar() {
+  const n = state.selectedKeys.size;
+  if (els.batchBar) els.batchBar.classList.toggle('hidden', false);
+  if (els.batchCount) els.batchCount.textContent = `已选 ${n}`;
+  if (els.btnBatchMove) els.btnBatchMove.disabled = n === 0;
+  if (els.btnBatchDelete) els.btnBatchDelete.disabled = n === 0;
+  if (els.batchSelectAll && els.galleryGrid) {
+    const boxes = [...els.galleryGrid.querySelectorAll('.gallery-check')];
+    els.batchSelectAll.checked = boxes.length > 0 && boxes.every((b) => b.checked);
+    els.batchSelectAll.indeterminate = n > 0 && !els.batchSelectAll.checked;
+  }
+}
+
+function clearSelection() {
+  state.selectedKeys.clear();
+  els.galleryGrid?.querySelectorAll('.gallery-item').forEach((el) => {
+    el.classList.remove('is-selected');
+    const cb = el.querySelector('.gallery-check');
+    if (cb) cb.checked = false;
+  });
+  updateBatchBar();
+}
+
 function renderGalleryItems(images, append) {
-  if (!append) els.galleryGrid.innerHTML = '';
+  if (!append) {
+    els.galleryGrid.innerHTML = '';
+    state.selectedKeys.clear();
+  }
 
   for (const img of images) {
     const el = document.createElement('figure');
     el.className = 'gallery-item';
+    el.dataset.key = img.key;
+    const isImage = (img.kind || 'image') === 'image';
+    const title = img.originalName || img.key.split('/').pop() || img.key;
+    const preview = isImage
+      ? `<a href="${escapeAttr(img.url)}" target="_blank" rel="noopener noreferrer">
+           <img src="${escapeAttr(img.url)}" alt="" loading="lazy" />
+         </a>`
+      : `<a class="file-card" href="${escapeAttr(img.url)}" target="_blank" rel="noopener noreferrer">
+           <span class="file-card-kind">${escapeHtml(img.kindLabel || img.kind || '文件')}</span>
+           <span class="file-card-name">${escapeHtml(title)}</span>
+         </a>`;
+
     el.innerHTML = `
-      <a href="${escapeAttr(img.url)}" target="_blank" rel="noopener noreferrer">
-        <img src="${escapeAttr(img.url)}" alt="" loading="lazy" />
-      </a>
+      <input type="checkbox" class="gallery-check" data-key="${escapeAttr(img.key)}" aria-label="选择" />
+      ${preview}
       <div class="gallery-actions">
         <button type="button" class="copy-btn" data-url="${escapeAttr(img.url)}">复制链接</button>
+        <button type="button" class="btn-ghost btn-move" data-key="${escapeAttr(img.key)}">移动</button>
         <button type="button" class="delete-btn" data-key="${escapeAttr(img.key)}">删除</button>
       </div>
     `;
 
+    el.querySelector('.gallery-check').addEventListener('change', (ev) => {
+      const key = ev.currentTarget.dataset.key;
+      if (ev.currentTarget.checked) {
+        state.selectedKeys.add(key);
+        el.classList.add('is-selected');
+      } else {
+        state.selectedKeys.delete(key);
+        el.classList.remove('is-selected');
+      }
+      updateBatchBar();
+    });
+
     el.querySelector('.copy-btn').addEventListener('click', (ev) => {
       copyText(ev.currentTarget.dataset.url, ev.currentTarget);
+    });
+
+    el.querySelector('.btn-move').addEventListener('click', async () => {
+      await moveKeys([img.key]);
     });
 
     el.querySelector('.delete-btn').addEventListener('click', async (ev) => {
       const key = ev.currentTarget.dataset.key;
       if (!key || !confirm(`确认删除？\n${key}`)) return;
       if (!(await ensureAuthed())) return;
-
       try {
         const { res, data } = await api('/api/delete', {
           method: 'POST',
           body: JSON.stringify({ key }),
         });
         if (!res.ok || !data.success) throw new Error(data.error || '删除失败');
+        state.selectedKeys.delete(key);
         el.remove();
+        updateBatchBar();
         showToast('已删除');
       } catch (err) {
         showToast(err.message || '删除失败');
@@ -669,12 +736,39 @@ function renderGalleryItems(images, append) {
 
     els.galleryGrid.appendChild(el);
   }
+  updateBatchBar();
+}
+
+async function moveKeys(keys) {
+  if (!keys.length) return;
+  if (!(await ensureAuthed())) return;
+  const choice = prompt(
+    `移动 ${keys.length} 个文件到文件夹：\n填写路径（留空=根目录）\n已有：${(state.folders || []).slice(0, 12).join(' · ') || '无'}`,
+    state.galleryFolder || state.uploadFolder || '',
+  );
+  if (choice == null) return;
+  const folder = choice.trim();
+  const { res, data } = await api('/api/move', {
+    method: 'POST',
+    body: JSON.stringify({ keys, folder }),
+  });
+  if (!res.ok && !data.moved?.length) {
+    if (res.status === 401) showLoginScreen();
+    showToast(data.error || '移动失败');
+    return;
+  }
+  showToast(data.message || '已移动');
+  if (folder) rememberFolder(folder);
+  fillFolderSelects();
+  clearSelection();
+  state.galleryLoaded = false;
+  await loadGallery(true);
 }
 
 async function loadGallery(reset = false) {
   if (state.loadingGallery) return;
   if (!(await ensureAuthed())) {
-    els.galleryStatus.textContent = '请先登录后查看画廊';
+    els.galleryStatus.textContent = '请先登录后查看文件库';
     return;
   }
 
@@ -683,14 +777,18 @@ async function loadGallery(reset = false) {
     state.cursor = null;
     els.galleryStatus.textContent = '加载中…';
     els.btnMore.classList.add('hidden');
+    clearSelection();
   }
 
   try {
     const params = new URLSearchParams({ limit: '24' });
     if (!reset && state.cursor) params.set('cursor', state.cursor);
     const folder = (els.galleryFolder?.value || state.galleryFolder || '').trim();
+    const kind = (els.galleryKind?.value || state.galleryKind || '').trim();
     state.galleryFolder = folder;
+    state.galleryKind = kind;
     if (folder) params.set('folder', folder);
+    if (kind) params.set('kind', kind);
 
     const { res, data } = await api(`/api/list?${params}`);
     if (!res.ok || !data.success) {
@@ -698,14 +796,14 @@ async function loadGallery(reset = false) {
       throw new Error(data.error || `加载失败 (${res.status})`);
     }
 
-    renderGalleryItems(data.images || [], !reset);
+    renderGalleryItems(data.files || data.images || [], !reset);
     state.cursor = data.cursor || null;
     state.galleryLoaded = true;
 
     const totalShown = els.galleryGrid.children.length;
     els.galleryStatus.textContent = totalShown
-      ? `已显示 ${totalShown} 张${data.truncated ? '（还有更多）' : ''}`
-      : '还没有图片，先去上传一张吧。';
+      ? `已显示 ${totalShown} 个${data.truncated ? '（还有更多）' : ''}`
+      : '还没有文件，先去上传吧。';
     els.btnMore.classList.toggle('hidden', !data.truncated);
   } catch (err) {
     els.galleryStatus.textContent = err.message || '加载失败';
@@ -820,6 +918,47 @@ function bindEvents() {
     state.galleryFolder = els.galleryFolder.value;
     state.galleryLoaded = false;
     loadGallery(true);
+  });
+  els.galleryKind?.addEventListener('change', () => {
+    state.galleryKind = els.galleryKind.value;
+    state.galleryLoaded = false;
+    loadGallery(true);
+  });
+  els.batchSelectAll?.addEventListener('change', () => {
+    const on = els.batchSelectAll.checked;
+    els.galleryGrid?.querySelectorAll('.gallery-check').forEach((cb) => {
+      cb.checked = on;
+      const key = cb.dataset.key;
+      const item = cb.closest('.gallery-item');
+      if (on) {
+        state.selectedKeys.add(key);
+        item?.classList.add('is-selected');
+      } else {
+        state.selectedKeys.delete(key);
+        item?.classList.remove('is-selected');
+      }
+    });
+    updateBatchBar();
+  });
+  els.btnBatchMove?.addEventListener('click', async () => {
+    await moveKeys([...state.selectedKeys]);
+  });
+  els.btnBatchDelete?.addEventListener('click', async () => {
+    const keys = [...state.selectedKeys];
+    if (!keys.length) return;
+    if (!confirm(`确认删除选中的 ${keys.length} 个文件？`)) return;
+    const { res, data } = await api('/api/delete', {
+      method: 'POST',
+      body: JSON.stringify({ keys }),
+    });
+    if (!res.ok && !data.deleted?.length) {
+      showToast(data.error || '删除失败');
+      return;
+    }
+    showToast(data.message || '已删除');
+    clearSelection();
+    state.galleryLoaded = false;
+    await loadGallery(true);
   });
 
   els.btnAuth.addEventListener('click', openAccountSheet);

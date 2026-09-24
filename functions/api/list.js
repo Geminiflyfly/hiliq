@@ -1,4 +1,12 @@
-import { folderFromKey, handleOptions, json, normalizeFolder, publicUrl } from '../utils.js';
+import {
+  folderFromKey,
+  handleOptions,
+  json,
+  kindFromType,
+  kindLabel,
+  normalizeFolder,
+  publicUrl,
+} from '../utils.js';
 import { requireUser } from '../auth.js';
 
 const DEFAULT_LIMIT = 24;
@@ -29,16 +37,18 @@ export async function onRequestGet(context) {
     if (folder === null) {
       return json({ success: false, error: '文件夹路径非法' }, 400);
     }
+    const kindFilter = (searchParams.get('kind') || '').trim().toLowerCase();
     const prefix = folder ? `${folder}/` : undefined;
 
+    // Fetch extra when filtering by kind (client-side filter on page)
     const listed = await env.BUCKET.list({
-      limit,
+      limit: kindFilter ? Math.min(limit * 3, MAX_LIMIT) : limit,
       cursor,
       prefix,
       include: ['httpMetadata', 'customMetadata'],
     });
 
-    const images = (listed.objects || [])
+    let files = (listed.objects || [])
       .filter((obj) => {
         if (!obj.key || obj.key.endsWith('/') || obj.size <= 0) return false;
         if (obj.key.endsWith('/.keep')) return false;
@@ -48,24 +58,35 @@ export async function onRequestGet(context) {
       .map((obj) => {
         const url = publicUrl(request, env, obj.key);
         const f = obj.customMetadata?.folder || folderFromKey(obj.key);
+        const contentType = obj.httpMetadata?.contentType || null;
+        const originalName = obj.customMetadata?.originalName || null;
+        const kind = obj.customMetadata?.kind || kindFromType(contentType, originalName || obj.key);
         return {
           key: obj.key,
           url,
           folder: f || '',
+          kind,
+          kindLabel: kindLabel(kind),
           size: obj.size,
           uploaded: obj.uploaded?.toISOString?.() || obj.uploaded || null,
-          contentType: obj.httpMetadata?.contentType || null,
-          originalName: obj.customMetadata?.originalName || null,
+          contentType,
+          originalName,
         };
       });
 
+    if (kindFilter) {
+      files = files.filter((f) => f.kind === kindFilter).slice(0, limit);
+    }
+
     return json({
       success: true,
-      images,
+      images: files,
+      files,
       folder: folder || '',
+      kind: kindFilter || '',
       truncated: Boolean(listed.truncated),
       cursor: listed.truncated ? listed.cursor : null,
-      count: images.length,
+      count: files.length,
     });
   } catch (err) {
     return json({

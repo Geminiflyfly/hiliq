@@ -1,17 +1,18 @@
 import {
   buildObjectKey,
-  extFromType,
+  extFromFile,
   folderFromKey,
   handleOptions,
   isAllowedType,
   json,
+  kindFromType,
+  kindLabel,
   linkFormats,
+  maxBytesForKind,
   normalizeFolder,
   publicUrl,
 } from '../utils.js';
 import { requireUser } from '../auth.js';
-
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export async function onRequestOptions() {
   return handleOptions();
@@ -37,19 +38,20 @@ export async function onRequestPost(context) {
       file = form.get('file') || form.get('image');
       folderRaw = form.get('folder') || form.get('prefix') || '';
       if (!file || typeof file === 'string') {
-        return json({ success: false, error: '请使用字段名 file 上传图片' }, 400);
+        return json({ success: false, error: '请使用字段名 file 上传文件' }, 400);
       }
-    } else if (contentType.startsWith('image/')) {
+    } else if (contentType.startsWith('image/') || contentType.startsWith('video/') || contentType.startsWith('audio/')) {
       const buffer = await request.arrayBuffer();
       if (buffer.byteLength === 0) {
         return json({ success: false, error: '请求体为空' }, 400);
       }
-      file = new File([buffer], `paste.${extFromType(contentType)}`, { type: contentType });
+      const ext = extFromFile({ name: '', type: contentType });
+      file = new File([buffer], `paste.${ext}`, { type: contentType });
       folderRaw = new URL(request.url).searchParams.get('folder') || '';
     } else {
       return json({
         success: false,
-        error: '请使用 multipart/form-data 或直接发送 image/* 请求体',
+        error: '请使用 multipart/form-data 上传',
       }, 400);
     }
 
@@ -58,45 +60,50 @@ export async function onRequestPost(context) {
       return json({ success: false, error: '文件夹路径非法' }, 400);
     }
 
-    if (!isAllowedType(file.type)) {
+    if (!isAllowedType(file.type, file.name)) {
       return json({
         success: false,
-        error: `不支持的文件类型：${file.type || 'unknown'}`,
+        error: `不支持的文件类型：${file.type || file.name || 'unknown'}`,
       }, 415);
     }
 
-    if (file.size > MAX_BYTES) {
+    const kind = kindFromType(file.type, file.name);
+    const maxBytes = maxBytesForKind(kind);
+    if (file.size > maxBytes) {
       return json({
         success: false,
-        error: `文件过大：最大允许 ${MAX_BYTES / 1024 / 1024} MB`,
+        error: `文件过大：${kindLabel(kind)}最大允许 ${Math.round(maxBytes / 1024 / 1024)} MB`,
       }, 413);
     }
 
-    const ext = extFromType(file.type);
+    const ext = extFromFile(file);
     const date = new Date();
     const key = buildObjectKey(folder, ext, date);
 
     const arrayBuffer = await file.arrayBuffer();
     await env.BUCKET.put(key, arrayBuffer, {
       httpMetadata: {
-        contentType: file.type,
+        contentType: file.type || 'application/octet-stream',
         cacheControl: 'public, max-age=31536000, immutable',
       },
       customMetadata: {
         originalName: file.name || '',
         uploadedAt: date.toISOString(),
         folder: folder || '',
+        kind,
       },
     });
 
     const url = publicUrl(request, env, key);
-    const formats = linkFormats(url, file.name || key);
+    const formats = linkFormats(url, file.name || key, kind);
 
     return json({
       success: true,
       key,
       folder: folder || '',
       folderLabel: folderFromKey(key) || folder || '',
+      kind,
+      kindLabel: kindLabel(kind),
       size: file.size,
       contentType: file.type,
       uploadedAt: date.toISOString(),
