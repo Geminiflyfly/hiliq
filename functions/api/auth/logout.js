@@ -3,8 +3,8 @@ import {
   destroySession,
   parseCookies,
   SESSION_COOKIE,
-} from '../../../auth.js';
-import { handleOptions, json } from '../../../utils.js';
+} from '../../auth.js';
+import { handleOptions, json } from '../../utils.js';
 
 export async function onRequestOptions() {
   return handleOptions();

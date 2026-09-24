@@ -1,5 +1,5 @@
-import { countUsers, getSessionUser } from '../../../auth.js';
-import { handleOptions, json } from '../../../utils.js';
+import { countUsers, getSessionUser } from '../../auth.js';
+import { handleOptions, json } from '../../utils.js';
 
 export async function onRequestOptions() {
   return handleOptions();
