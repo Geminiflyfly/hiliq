@@ -518,6 +518,16 @@ body.is-booting #app-shell {
   color: var(--ink-400);
 }
 
+.folder-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.folder-opt-nested {
+  /* option styling is limited; label uses leading spaces / symbols */
+}
+
 .folder-bar-row {
   display: flex;
   gap: 0.5rem;

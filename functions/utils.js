@@ -154,12 +154,19 @@ export function buildObjectKey(folder, ext, date = new Date()) {
   return folder ? `${folder}/${name}` : name;
 }
 
-/** First path segment as folder label; empty = root. */
+/** Parent directory of an object key (supports nested paths). */
 export function folderFromKey(key) {
   const k = String(key || '');
-  const i = k.indexOf('/');
+  const i = k.lastIndexOf('/');
   if (i <= 0) return '';
   return k.slice(0, i);
+}
+
+/** Depth of a folder path (0 = top-level). */
+export function folderDepth(folder) {
+  const f = String(folder || '');
+  if (!f) return 0;
+  return f.split('/').length - 1;
 }
 
 export { ALLOWED_TYPES, EXT_MAP };

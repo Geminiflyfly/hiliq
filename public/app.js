@@ -18,6 +18,7 @@ const els = {
   uploadFolder: document.getElementById('upload-folder'),
   galleryFolder: document.getElementById('gallery-folder'),
   btnNewFolder: document.getElementById('btn-new-folder'),
+  btnNewSubfolder: document.getElementById('btn-new-subfolder'),
   progress: document.getElementById('upload-progress'),
   results: document.getElementById('upload-results'),
   galleryGrid: document.getElementById('gallery-grid'),
@@ -188,15 +189,28 @@ async function refreshMe() {
   updateAuthUi();
 }
 
+function folderOptionLabel(path) {
+  const parts = String(path).split('/');
+  const depth = parts.length - 1;
+  const leaf = parts[parts.length - 1];
+  const pad = depth > 0 ? `${'··'.repeat(depth)} ` : '';
+  return `${pad}${leaf}`;
+}
+
 function fillFolderSelects(preferredUpload) {
   const folders = state.folders || [];
   const uploadVal = preferredUpload ?? els.uploadFolder?.value ?? state.uploadFolder ?? '';
   const galleryVal = els.galleryFolder?.value ?? state.galleryFolder ?? '';
 
+  const optionsHtml = folders
+    .map(
+      (f) =>
+        `<option value="${escapeAttr(f)}">${escapeHtml(folderOptionLabel(f))}</option>`,
+    )
+    .join('');
+
   if (els.uploadFolder) {
-    els.uploadFolder.innerHTML =
-      `<option value="">根目录</option>` +
-      folders.map((f) => `<option value="${escapeAttr(f)}">${escapeHtml(f)}</option>`).join('');
+    els.uploadFolder.innerHTML = `<option value="">根目录</option>${optionsHtml}`;
     if (uploadVal && [...els.uploadFolder.options].some((o) => o.value === uploadVal)) {
       els.uploadFolder.value = uploadVal;
     }
@@ -204,9 +218,7 @@ function fillFolderSelects(preferredUpload) {
   }
 
   if (els.galleryFolder) {
-    els.galleryFolder.innerHTML =
-      `<option value="">全部</option>` +
-      folders.map((f) => `<option value="${escapeAttr(f)}">${escapeHtml(f)}</option>`).join('');
+    els.galleryFolder.innerHTML = `<option value="">全部</option>${optionsHtml}`;
     if (galleryVal && [...els.galleryFolder.options].some((o) => o.value === galleryVal)) {
       els.galleryFolder.value = galleryVal;
     }
@@ -230,29 +242,58 @@ async function loadFolders() {
   }
 }
 
-async function createFolder() {
-  const name = prompt('新文件夹名称（可含空格，如 fizzy 50k）');
+function rememberFolder(folder) {
+  if (!folder) return;
+  if (!state.folders.includes(folder)) {
+    state.folders.push(folder);
+  }
+  // Also remember ancestors
+  const parts = folder.split('/');
+  let acc = '';
+  for (const part of parts) {
+    acc = acc ? `${acc}/${part}` : part;
+    if (!state.folders.includes(acc)) state.folders.push(acc);
+  }
+  state.folders.sort((a, b) => a.localeCompare(b, 'zh'));
+}
+
+async function createFolder({ asSub = false } = {}) {
+  const current = getSelectedUploadFolder();
+  let name;
+
+  if (asSub) {
+    if (!current) {
+      showToast('请先选择父文件夹，再新建子目录');
+      return;
+    }
+    name = prompt(`在「${current}」下新建子目录名称`);
+  } else {
+    name = prompt('新文件夹路径（可多级，如 产品/春季）');
+  }
+
   if (name == null) return;
-  const trimmed = name.trim();
+  const trimmed = name.trim().replace(/^\/+|\/+$/g, '');
   if (!trimmed) {
     showToast('名称不能为空');
     return;
   }
+
+  const body = asSub
+    ? { parent: current, name: trimmed }
+    : { name: trimmed };
+
   const { res, data } = await api('/api/folders', {
     method: 'POST',
-    body: JSON.stringify({ name: trimmed }),
+    body: JSON.stringify(body),
   });
   if (!res.ok || !data.success) {
     showToast(data.error || '创建失败');
     return;
   }
-  const folder = data.folder || trimmed;
-  if (!state.folders.includes(folder)) {
-    state.folders.push(folder);
-    state.folders.sort((a, b) => a.localeCompare(b, 'zh'));
-  }
+  const folder = data.folder || (asSub ? `${current}/${trimmed}` : trimmed);
+  rememberFolder(folder);
   fillFolderSelects(folder);
-  showToast(`已选择文件夹：${folder}`);
+  showToast(`已选择：${folder}`);
 }
 
 function getSelectedUploadFolder() {
@@ -392,8 +433,7 @@ async function uploadFile(file) {
     showToast(folder ? `已上传到 ${folder}` : '上传成功');
     state.galleryLoaded = false;
     if (folder && !state.folders.includes(folder)) {
-      state.folders.push(folder);
-      state.folders.sort((a, b) => a.localeCompare(b, 'zh'));
+      rememberFolder(folder);
       fillFolderSelects(folder);
     }
   } catch (err) {
@@ -613,7 +653,8 @@ function bindEvents() {
     loadGallery(true);
   });
   els.btnRefreshUsers.addEventListener('click', () => loadUsers());
-  els.btnNewFolder?.addEventListener('click', createFolder);
+  els.btnNewFolder?.addEventListener('click', () => createFolder({ asSub: false }));
+  els.btnNewSubfolder?.addEventListener('click', () => createFolder({ asSub: true }));
   els.uploadFolder?.addEventListener('change', () => {
     state.uploadFolder = els.uploadFolder.value;
   });
