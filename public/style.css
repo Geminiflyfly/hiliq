@@ -93,9 +93,9 @@ body.is-booting #app-shell {
   overflow: hidden;
   min-height: 22rem;
   background:
-    linear-gradient(145deg, rgba(22, 58, 52, 0.88), rgba(31, 138, 112, 0.55)),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='700' viewBox='0 0 900 700'%3E%3Cdefs%3E%3ClinearGradient id='a' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%23b7d0c8' stop-opacity='0.25'/%3E%3Cstop offset='1' stop-color='%231f8a70' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='900' height='700' fill='url(%23a)'/%3E%3Cpath d='M0 420C140 360 220 520 360 460S560 280 720 320 900 400 900 400V700H0Z' fill='%23f3f7f5' fill-opacity='0.08'/%3E%3Ccircle cx='680' cy='160' r='90' fill='%23f3f7f5' fill-opacity='0.08'/%3E%3C/svg%3E")
-      center / cover no-repeat;
+    radial-gradient(ellipse 80% 60% at 20% 15%, rgba(43, 168, 138, 0.45), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 85% 80%, rgba(11, 31, 28, 0.55), transparent 55%),
+    linear-gradient(155deg, #163a34 0%, #1f8a70 48%, #0b1f1c 100%);
 }
 
 @media (min-width: 880px) {
@@ -104,22 +104,180 @@ body.is-booting #app-shell {
   }
 }
 
+.lv-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+.lv-glow-a {
+  width: 14rem;
+  height: 14rem;
+  left: -3rem;
+  top: -2rem;
+  background: rgba(183, 208, 200, 0.35);
+  animation: lv-drift 9s ease-in-out infinite;
+}
+
+.lv-glow-b {
+  width: 11rem;
+  height: 11rem;
+  right: -2rem;
+  bottom: 1rem;
+  background: rgba(43, 168, 138, 0.4);
+  animation: lv-drift 11s ease-in-out infinite reverse;
+}
+
+@keyframes lv-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(12px, -10px) scale(1.08);
+  }
+}
+
+.lv-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+  background-image:
+    linear-gradient(rgba(243, 247, 245, 0.2) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(243, 247, 245, 0.2) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 70% 65% at 50% 45%, #000 20%, transparent 75%);
+}
+
+.lv-stack {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.lv-shot {
+  position: absolute;
+  width: 42%;
+  aspect-ratio: 4 / 5;
+  border: 1px solid rgba(243, 247, 245, 0.28);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.lv-shot-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+
+.lv-shot-1 {
+  left: 14%;
+  top: 18%;
+  transform: rotate(-8deg);
+  background:
+    linear-gradient(160deg, rgba(243, 247, 245, 0.2), transparent 55%),
+    linear-gradient(25deg, #2a5c52, #5a8a7e 55%, #b7d0c8);
+  animation: lv-float-a 6.5s ease-in-out infinite;
+}
+
+.lv-shot-2 {
+  right: 12%;
+  top: 28%;
+  width: 36%;
+  transform: rotate(7deg);
+  background:
+    linear-gradient(200deg, rgba(11, 31, 28, 0.25), transparent 50%),
+    linear-gradient(120deg, #0b1f1c, #1f8a70 60%, #2ba88a);
+  animation: lv-float-b 7.5s ease-in-out infinite;
+}
+
+.lv-shot-3 {
+  left: 28%;
+  bottom: 16%;
+  width: 38%;
+  aspect-ratio: 5 / 4;
+  transform: rotate(2deg);
+  background:
+    radial-gradient(circle at 30% 30%, rgba(243, 247, 245, 0.35), transparent 45%),
+    linear-gradient(135deg, #163a34 10%, #2ba88a 70%, #e8f0ec);
+  animation: lv-float-c 8s ease-in-out infinite;
+}
+
+@keyframes lv-float-a {
+  0%,
+  100% {
+    transform: rotate(-8deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-6deg) translateY(-8px);
+  }
+}
+
+@keyframes lv-float-b {
+  0%,
+  100% {
+    transform: rotate(7deg) translateY(0);
+  }
+  50% {
+    transform: rotate(5deg) translateY(7px);
+  }
+}
+
+@keyframes lv-float-c {
+  0%,
+  100% {
+    transform: rotate(2deg) translateY(0);
+  }
+  50% {
+    transform: rotate(3.5deg) translateY(-6px);
+  }
+}
+
+.lv-copy {
+  position: absolute;
+  left: 1.75rem;
+  bottom: 1.75rem;
+  z-index: 2;
+  color: #f3f7f5;
+}
+
+.lv-mark {
+  margin: 0;
+  font-family: Syne, sans-serif;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.lv-caption {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(243, 247, 245, 0.72);
+}
+
 .login-visual-frame {
   position: absolute;
-  inset: 1.75rem;
+  inset: 1.15rem;
+  z-index: 3;
   border: 1px solid rgba(243, 247, 245, 0.22);
+  pointer-events: none;
   animation: frame-pulse 4.5s ease-in-out infinite;
 }
 
 @keyframes frame-pulse {
   0%,
   100% {
-    opacity: 0.55;
-    transform: scale(1);
+    opacity: 0.45;
   }
   50% {
-    opacity: 0.9;
-    transform: scale(0.985);
+    opacity: 0.85;
   }
 }
 
