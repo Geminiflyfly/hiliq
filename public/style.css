@@ -491,6 +491,33 @@ body.is-booting #app-shell {
   }
 }
 
+.folder-bar {
+  padding: 1rem 1.1rem;
+  border: 1.5px solid rgba(31, 138, 112, 0.28);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.folder-bar-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 0.85rem;
+}
+
+.folder-bar-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--tide);
+}
+
+.folder-bar-hint {
+  font-size: 0.8rem;
+  color: var(--ink-400);
+}
+
 .folder-bar-row {
   display: flex;
   gap: 0.5rem;

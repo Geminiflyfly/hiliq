@@ -32,7 +32,7 @@
       },
     };
   </script>
-  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./style.css?v=folders1" />
 </head>
 <body class="font-sans text-ink-950 antialiased is-booting">
   <div class="atmosphere" aria-hidden="true"></div>
@@ -107,13 +107,16 @@
               拖拽、点选或剪贴板粘贴，边缘直传 Cloudflare R2。
             </p>
 
-            <div class="folder-bar mt-8 max-w-xl">
-              <label class="field-label" for="upload-folder">上传到文件夹</label>
+            <div class="folder-bar mt-8 max-w-xl" id="folder-bar">
+              <div class="folder-bar-head">
+                <span class="folder-bar-title">文件夹</span>
+                <span class="folder-bar-hint">选择后上传到对应目录</span>
+              </div>
               <div class="folder-bar-row mt-2">
                 <select id="upload-folder" class="field folder-select" aria-label="选择文件夹">
                   <option value="">根目录</option>
                 </select>
-                <button type="button" id="btn-new-folder" class="btn-ghost">新建</button>
+                <button type="button" id="btn-new-folder" class="btn-ghost">新建文件夹</button>
               </div>
             </div>
 
@@ -209,6 +212,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-  <script src="./app.js" type="module"></script>
+  <script src="./app.js?v=folders1" type="module"></script>
 </body>
 </html>
