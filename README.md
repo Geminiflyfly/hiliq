@@ -105,20 +105,20 @@ npx wrangler pages deploy public --project-name=hiliq
 
 ### （推荐）R2 自定义域名
 
-若桶已绑定自定义域名（例如 `https://pic.kslit.com`）：
+若桶已绑定图片专用域名（例如 `https://img.kslit.com`），站点本身用 `pic.kslit.com`：
 
 1. 在 `wrangler.toml` 的 `[vars]` 中设置（或在 Pages「变量和机密」里设置）：
 
    ```toml
-   CDN_URL = "https://pic.kslit.com"
+   CDN_URL = "https://img.kslit.com"
    ```
 
-2. 外链**不要**加 `/img`，文件夹名里的空格要编码为 `%20`：
+2. 外链使用图片域名，**不要**加 `/img`，文件夹名里的空格要编码为 `%20`：
 
-   - ✅ `https://pic.kslit.com/fizzy%2050k/01-Watermelon-Ice--Strawberry-Kiwi.png`
-   - ❌ `https://pic.kslit.com/img/fizzy 50k/01-....png`（多了 `/img`，且空格未编码 → 404）
+   - ✅ `https://img.kslit.com/fizzy%2050k/01-Watermelon-Ice--Strawberry-Kiwi.png`
+   - ❌ `https://pic.kslit.com/img/fizzy 50k/01-....png`（站点域名 + `/img` + 未编码空格 → 404）
 
-未设置 `CDN_URL` 时，链接走 Pages 代理：`https://你的Pages域名/img/<key>`。
+未设置 `CDN_URL` 时，链接走 Pages 代理：`https://你的站点域名/img/<key>`。
 
 ## API 说明
 

@@ -8,8 +8,9 @@ pages_build_output_dir = "public"
 binding = "BUCKET"
 bucket_name = "vape-img"
 
-# CDN_URL = R2 自定义域名（不要带 /img，也不要末尾 /）
-# 有自定义域时外链形如 https://pic.kslit.com/文件夹/文件.png
+# CDN_URL = 图片专用域名（不要带 /img，也不要末尾 /）
+# 外链形如 https://img.kslit.com/文件夹/文件.png
+# pic.kslit.com 是站点域名，不要填到这里
 [vars]
-CDN_URL = "https://pic.kslit.com"
+CDN_URL = "https://img.kslit.com"
 # UPLOAD_TOKEN = "change-me"
