@@ -1,8 +1,12 @@
 /**
- * Kslit frontend — auth, upload, gallery, user admin.
+ * Kslit frontend — guest login page, then upload / gallery / users.
  */
 
 const els = {
+  viewLogin: document.getElementById('view-login'),
+  appShell: document.getElementById('app-shell'),
+  loginHeading: document.getElementById('login-heading'),
+  loginSub: document.getElementById('login-sub'),
   tabUpload: document.getElementById('tab-upload'),
   tabGallery: document.getElementById('tab-gallery'),
   tabUsers: document.getElementById('tab-users'),
@@ -18,19 +22,15 @@ const els = {
   btnMore: document.getElementById('btn-more'),
   btnRefresh: document.getElementById('btn-refresh'),
   btnAuth: document.getElementById('btn-auth'),
-  setupBanner: document.getElementById('setup-banner'),
-  btnSetupBanner: document.getElementById('btn-setup-banner'),
   authOverlay: document.getElementById('auth-overlay'),
   authTitle: document.getElementById('auth-title'),
   authHint: document.getElementById('auth-hint'),
   authForm: document.getElementById('auth-form'),
-  authLoggedIn: document.getElementById('auth-logged-in'),
   authCurrentUser: document.getElementById('auth-current-user'),
   authUsername: document.getElementById('auth-username'),
   authPassword: document.getElementById('auth-password'),
   btnAuthSubmit: document.getElementById('btn-auth-submit'),
   btnLogout: document.getElementById('btn-logout'),
-  btnCloseAuth: document.getElementById('btn-close-auth'),
   btnCloseAuthIn: document.getElementById('btn-close-auth-in'),
   formCreateUser: document.getElementById('form-create-user'),
   newUsername: document.getElementById('new-username'),
@@ -109,52 +109,61 @@ function escapeAttr(str) {
   return escapeHtml(str).replace(/'/g, '&#39;');
 }
 
-function updateAuthUi() {
-  const isAdmin = state.user?.role === 'admin';
-  els.tabUsers.classList.toggle('hidden', !isAdmin);
+function showLoginScreen() {
+  document.body.classList.remove('is-booting');
+  els.viewLogin.hidden = false;
+  els.appShell.hidden = true;
+  closeAccountSheet();
 
-  if (els.setupBanner) {
-    const showSetup = Boolean(state.needSetup) && !state.user;
-    els.setupBanner.classList.toggle('hidden', !showSetup);
-  }
-
-  if (state.user) {
-    els.btnAuth.textContent = state.user.username;
-    els.btnAuth.title = '账号';
+  if (state.needSetup) {
+    els.loginHeading.textContent = '创建管理员账号';
+    els.loginSub.textContent = '首次使用：账号保存在 Cloudflare D1。';
+    els.btnAuthSubmit.textContent = '创建并进入';
   } else {
-    els.btnAuth.textContent = state.needSetup ? '初始化' : '登录';
-    els.btnAuth.title = state.needSetup ? '创建管理员' : '登录';
-  }
-
-  if (state.view === 'users' && !isAdmin) {
-    switchView('upload');
-  }
-}
-
-function openAuth() {
-  const loggedIn = Boolean(state.user);
-  els.authLoggedIn.classList.toggle('hidden', !loggedIn);
-  els.authForm.classList.toggle('hidden', loggedIn);
-
-  if (loggedIn) {
-    els.authTitle.textContent = '账号';
-    els.authHint.textContent = '已登录，可退出或关闭。';
-    els.authCurrentUser.textContent = `${state.user.username}（${state.user.role === 'admin' ? '管理员' : '用户'}）`;
-  } else if (state.needSetup) {
-    els.authTitle.textContent = '初始化管理员';
-    els.authHint.textContent = '首次使用：创建管理员账号（存入 Cloudflare D1）。';
-    els.btnAuthSubmit.textContent = '创建并登录';
-  } else {
-    els.authTitle.textContent = '登录';
-    els.authHint.textContent = '使用 D1 账号登录后即可上传与管理图片。';
+    els.loginHeading.textContent = '登录后开始上传';
+    els.loginSub.textContent = '边缘图床 · R2 存储 · D1 账号';
     els.btnAuthSubmit.textContent = '登录';
   }
 
-  els.authOverlay.hidden = false;
-  if (!loggedIn) els.authUsername.focus();
+  requestAnimationFrame(() => els.authUsername?.focus());
 }
 
-function closeAuth() {
+function showAppShell() {
+  document.body.classList.remove('is-booting');
+  els.viewLogin.hidden = true;
+  els.appShell.hidden = false;
+  const isAdmin = state.user?.role === 'admin';
+  els.tabUsers.classList.toggle('hidden', !isAdmin);
+  if (state.user) {
+    els.btnAuth.textContent = state.user.username;
+  }
+  if (state.view === 'users' && !isAdmin) {
+    switchView('upload');
+  } else {
+    switchView(state.view || 'upload');
+  }
+}
+
+function updateAuthUi() {
+  if (state.user) {
+    showAppShell();
+  } else if (state.authEnabled || state.needSetup) {
+    showLoginScreen();
+  } else {
+    // D1 not bound — allow open app for local / misconfig visibility
+    showAppShell();
+  }
+}
+
+function openAccountSheet() {
+  if (!state.user) return;
+  els.authTitle.textContent = '账号';
+  els.authHint.textContent = '当前登录信息';
+  els.authCurrentUser.textContent = `${state.user.username}（${state.user.role === 'admin' ? '管理员' : '用户'}）`;
+  els.authOverlay.hidden = false;
+}
+
+function closeAccountSheet() {
   els.authOverlay.hidden = true;
 }
 
@@ -167,22 +176,12 @@ async function refreshMe() {
   state.needSetup = Boolean(data.needSetup);
   state.authEnabled = Boolean(data.authEnabled);
   updateAuthUi();
-  if (state.needSetup && !state.user) {
-    // Auto-open setup dialog once tables are ready
-    openAuth();
-  }
 }
 
 async function ensureAuthed() {
   if (state.user) return true;
-  if (!state.authEnabled) return true;
-  if (state.needSetup) {
-    showToast('请先初始化管理员账号');
-    openAuth();
-    return false;
-  }
-  showToast('请先登录');
-  openAuth();
+  showLoginScreen();
+  showToast(state.needSetup ? '请先创建管理员账号' : '请先登录');
   return false;
 }
 
@@ -301,9 +300,7 @@ async function uploadFile(file) {
     const { res, data } = await api('/api/upload', { method: 'POST', body: form });
     setProgress(true, 85, '处理响应…');
     if (!res.ok || !data.success) {
-      if (res.status === 401) {
-        openAuth();
-      }
+      if (res.status === 401) showLoginScreen();
       throw new Error(data.error || `上传失败 (${res.status})`);
     }
     setProgress(true, 100, '完成');
@@ -350,6 +347,7 @@ function onDrop(e) {
 }
 
 async function handlePaste(e) {
+  if (els.appShell.hidden) return;
   const items = e.clipboardData?.items;
   if (!items) return;
   const images = [];
@@ -426,7 +424,7 @@ async function loadGallery(reset = false) {
 
     const { res, data } = await api(`/api/list?${params}`);
     if (!res.ok || !data.success) {
-      if (res.status === 401) openAuth();
+      if (res.status === 401) showLoginScreen();
       throw new Error(data.error || `加载失败 (${res.status})`);
     }
 
@@ -451,7 +449,7 @@ async function loadUsers() {
   try {
     const { res, data } = await api('/api/users');
     if (!res.ok || !data.success) {
-      if (res.status === 401) openAuth();
+      if (res.status === 401) showLoginScreen();
       throw new Error(data.error || '加载用户失败');
     }
 
@@ -521,12 +519,10 @@ function bindEvents() {
   els.btnRefresh.addEventListener('click', () => loadGallery(true));
   els.btnRefreshUsers.addEventListener('click', () => loadUsers());
 
-  els.btnAuth.addEventListener('click', openAuth);
-  els.btnSetupBanner?.addEventListener('click', openAuth);
-  els.btnCloseAuth.addEventListener('click', closeAuth);
-  els.btnCloseAuthIn.addEventListener('click', closeAuth);
+  els.btnAuth.addEventListener('click', openAccountSheet);
+  els.btnCloseAuthIn.addEventListener('click', closeAccountSheet);
   els.authOverlay.addEventListener('click', (e) => {
-    if (e.target === els.authOverlay) closeAuth();
+    if (e.target === els.authOverlay) closeAccountSheet();
   });
 
   els.authForm.addEventListener('submit', async (e) => {
@@ -546,7 +542,6 @@ function bindEvents() {
     state.needSetup = false;
     els.authPassword.value = '';
     updateAuthUi();
-    closeAuth();
     showToast(path.includes('setup') ? '管理员已创建' : '登录成功');
   });
 
@@ -555,8 +550,8 @@ function bindEvents() {
     state.user = null;
     state.galleryLoaded = false;
     state.usersLoaded = false;
-    updateAuthUi();
-    closeAuth();
+    state.view = 'upload';
+    closeAccountSheet();
     showToast('已退出');
     await refreshMe();
   });
@@ -581,11 +576,12 @@ function bindEvents() {
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !els.authOverlay.hidden) closeAuth();
+    if (e.key === 'Escape' && !els.authOverlay.hidden) closeAccountSheet();
   });
 }
 
 bindEvents();
 refreshMe().catch(() => {
-  updateAuthUi();
+  document.body.classList.remove('is-booting');
+  showLoginScreen();
 });
