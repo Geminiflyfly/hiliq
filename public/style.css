@@ -602,6 +602,203 @@ body.is-booting #app-shell {
   font-size: 0.85rem;
 }
 
+.gallery-toolbar {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.gallery-toolbar-side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.folder-picker {
+  position: relative;
+  width: 100%;
+}
+
+.folder-picker-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink-950);
+  font: inherit;
+  font-size: 0.95rem;
+  text-align: left;
+  padding: 0.7rem 0.9rem;
+  cursor: pointer;
+}
+
+.folder-picker-btn:hover,
+.folder-picker-btn[aria-expanded='true'] {
+  border-color: var(--tide);
+}
+
+.folder-picker-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-picker-caret {
+  flex: none;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 1.5px solid var(--ink-600);
+  border-bottom: 1.5px solid var(--ink-600);
+  transform: rotate(45deg) translateY(-2px);
+}
+
+.folder-picker-menu {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  background: #fff;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-soft);
+  padding: 0.55rem;
+}
+
+.folder-picker-search {
+  margin-top: 0;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.folder-picker-list {
+  margin-top: 0.45rem;
+  max-height: 18rem;
+  overflow: auto;
+}
+
+.folder-picker-sep {
+  height: 1px;
+  margin: 0.35rem 0;
+  background: var(--line);
+}
+
+.folder-opt {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0.5rem 0.55rem;
+  cursor: pointer;
+}
+
+.folder-opt:hover {
+  background: var(--ink-50);
+}
+
+.folder-opt.is-current {
+  border-left-color: var(--tide);
+  background: var(--tide-soft);
+}
+
+.folder-opt-icon {
+  flex: none;
+  width: 0.95rem;
+  height: 0.75rem;
+  border: 1.5px solid var(--tide);
+  border-radius: 1px 1px 0 0;
+  position: relative;
+}
+
+.folder-opt-icon::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: -4px;
+  width: 0.38rem;
+  height: 3px;
+  background: var(--tide);
+}
+
+.folder-opt-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.folder-opt-leaf {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--ink-950);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-opt-meta {
+  flex: none;
+  max-width: 46%;
+  font-size: 0.72rem;
+  color: var(--ink-400);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-opt-empty {
+  padding: 0.75rem 0.4rem;
+  font-size: 0.85rem;
+  color: var(--ink-400);
+}
+
+.gallery-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.crumb {
+  border: 0;
+  background: transparent;
+  color: var(--ink-600);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0;
+  cursor: pointer;
+}
+
+.crumb:hover {
+  color: var(--tide);
+}
+
+.crumb.is-current {
+  color: var(--ink-950);
+  font-weight: 600;
+  cursor: default;
+}
+
+.crumb-sep {
+  color: var(--ink-200);
+  font-size: 0.85rem;
+}
+
+.crumb-note {
+  font-size: 0.72rem;
+  color: var(--ink-400);
+  border: 1px solid var(--line);
+  padding: 0.1rem 0.4rem;
+}
+
 .dropzone {
   position: relative;
   display: block;

@@ -18,8 +18,14 @@ const els = {
   dropzone: document.getElementById('dropzone'),
   fileInput: document.getElementById('file-input'),
   uploadFolder: document.getElementById('upload-folder'),
-  galleryFolder: document.getElementById('gallery-folder'),
   galleryKind: document.getElementById('gallery-kind'),
+  galleryFolderPicker: document.getElementById('gallery-folder-picker'),
+  galleryFolderBtn: document.getElementById('gallery-folder-btn'),
+  galleryFolderLabel: document.getElementById('gallery-folder-label'),
+  galleryFolderMenu: document.getElementById('gallery-folder-menu'),
+  galleryFolderSearch: document.getElementById('gallery-folder-search'),
+  galleryFolderList: document.getElementById('gallery-folder-list'),
+  galleryCrumbs: document.getElementById('gallery-crumbs'),
   btnNewFolder: document.getElementById('btn-new-folder'),
   btnNewSubfolder: document.getElementById('btn-new-subfolder'),
   btnRefreshFolders: document.getElementById('btn-refresh-folders'),
@@ -74,6 +80,8 @@ const state = {
   uploadFolder: '',
   galleryFolder: '',
   galleryKind: '',
+  galleryFolderOpen: false,
+  folderStatsLoaded: false,
   selectedKeys: new Set(),
 };
 
@@ -216,7 +224,6 @@ function folderOptionLabel(path) {
 function fillFolderSelects(preferredUpload) {
   const folders = state.folders || [];
   const uploadVal = preferredUpload ?? els.uploadFolder?.value ?? state.uploadFolder ?? '';
-  const galleryVal = els.galleryFolder?.value ?? state.galleryFolder ?? '';
 
   const optionsHtml = folders
     .map(
@@ -233,13 +240,104 @@ function fillFolderSelects(preferredUpload) {
     state.uploadFolder = els.uploadFolder.value;
   }
 
-  if (els.galleryFolder) {
-    els.galleryFolder.innerHTML = `<option value="">全部文件夹</option>${optionsHtml}`;
-    if (galleryVal && [...els.galleryFolder.options].some((o) => o.value === galleryVal)) {
-      els.galleryFolder.value = galleryVal;
-    }
-    state.galleryFolder = els.galleryFolder.value;
-  }
+  renderGalleryFolderButton();
+  renderGalleryCrumbs();
+  renderGalleryFolderList();
+}
+
+function folderMeta(item) {
+  const parts = String(item.path || '').split('/');
+  const parent = parts.length > 1 ? parts.slice(0, -1).join(' / ') : '';
+  const count = item.files != null ? `${item.files}` : '';
+  return [parent, count].filter(Boolean).join(' · ');
+}
+
+function renderGalleryFolderButton() {
+  if (!els.galleryFolderLabel) return;
+  const path = state.galleryFolder || '';
+  els.galleryFolderLabel.textContent = path || '全部文件夹';
+  els.galleryFolderBtn?.setAttribute('aria-expanded', String(state.galleryFolderOpen));
+}
+
+function renderGalleryCrumbs() {
+  if (!els.galleryCrumbs) return;
+  const path = state.galleryFolder || '';
+  const parts = path ? path.split('/') : [];
+  const bits = [
+    `<button type="button" class="crumb${path ? '' : ' is-current'}" data-folder="">全部</button>`,
+  ];
+  let acc = '';
+  parts.forEach((part, i) => {
+    acc = acc ? `${acc}/${part}` : part;
+    const last = i === parts.length - 1;
+    bits.push('<span class="crumb-sep" aria-hidden="true">/</span>');
+    bits.push(
+      `<button type="button" class="crumb${last ? ' is-current' : ''}" data-folder="${escapeAttr(acc)}">${escapeHtml(part)}</button>`,
+    );
+  });
+  if (path) bits.push('<span class="crumb-note">含下级</span>');
+  els.galleryCrumbs.innerHTML = bits.join('');
+}
+
+function renderGalleryFolderList() {
+  if (!els.galleryFolderList) return;
+  const q = (els.galleryFolderSearch?.value || '').trim().toLowerCase();
+  const items = (state.folderItems || []).filter((item) => {
+    if (!q) return true;
+    return String(item.path || '').toLowerCase().includes(q);
+  });
+  const current = state.galleryFolder || '';
+  const allRow = `
+    <button type="button" class="folder-opt${current ? '' : ' is-current'}" role="option" data-folder="" aria-selected="${!current}">
+      <span class="folder-opt-leaf">全部文件夹</span>
+    </button>
+    <div class="folder-picker-sep"></div>`;
+  const rows = items.length
+    ? items
+        .map((item) => {
+          const parts = String(item.path).split('/');
+          const leaf = parts[parts.length - 1];
+          const depth = item.depth || Math.max(0, parts.length - 1);
+          const on = item.path === current;
+          return `
+        <button type="button" class="folder-opt${on ? ' is-current' : ''}" role="option" data-folder="${escapeAttr(item.path)}" aria-selected="${on}" style="padding-left:${0.55 + depth * 1.05}rem">
+          <span class="folder-opt-icon" aria-hidden="true"></span>
+          <span class="folder-opt-main"><span class="folder-opt-leaf">${escapeHtml(leaf)}</span></span>
+          <span class="folder-opt-meta">${escapeHtml(folderMeta(item))}</span>
+        </button>`;
+        })
+        .join('')
+    : `<p class="folder-opt-empty">${q ? '没有匹配的文件夹' : '还没有文件夹'}</p>`;
+  els.galleryFolderList.innerHTML = allRow + rows;
+}
+
+function openGalleryFolderMenu() {
+  if (!els.galleryFolderMenu) return;
+  state.galleryFolderOpen = true;
+  els.galleryFolderMenu.hidden = false;
+  renderGalleryFolderButton();
+  if (els.galleryFolderSearch) els.galleryFolderSearch.value = '';
+  renderGalleryFolderList();
+  els.galleryFolderSearch?.focus();
+  if (!state.folderStatsLoaded) loadFolders({ withStats: true });
+}
+
+function closeGalleryFolderMenu() {
+  state.galleryFolderOpen = false;
+  if (els.galleryFolderMenu) els.galleryFolderMenu.hidden = true;
+  renderGalleryFolderButton();
+}
+
+function setGalleryFolder(path) {
+  const next = String(path || '');
+  const changed = next !== (state.galleryFolder || '');
+  state.galleryFolder = next;
+  closeGalleryFolderMenu();
+  renderGalleryCrumbs();
+  renderGalleryFolderList();
+  if (!changed) return;
+  state.galleryLoaded = false;
+  if (state.view === 'gallery') loadGallery(true);
 }
 
 async function loadFolders({ withStats = false } = {}) {
@@ -256,6 +354,7 @@ async function loadFolders({ withStats = false } = {}) {
       childCount: 0,
     }));
     state.foldersLoaded = true;
+    if (withStats) state.folderStatsLoaded = true;
     fillFolderSelects();
     if (state.view === 'folders') renderFoldersTree();
   } catch (err) {
@@ -320,10 +419,9 @@ async function handleFolderAction(act, path) {
   }
   if (act === 'gallery') {
     rememberFolder(path);
-    fillFolderSelects();
-    if (els.galleryFolder) els.galleryFolder.value = path;
     state.galleryFolder = path;
     state.galleryLoaded = false;
+    fillFolderSelects();
     switchView('gallery');
     return;
   }
@@ -373,10 +471,13 @@ async function handleFolderAction(act, path) {
     if (state.uploadFolder === path || state.uploadFolder.startsWith(`${path}/`)) {
       state.uploadFolder = '';
     }
-    if (state.galleryFolder === path || state.galleryFolder.startsWith(`${path}/`)) {
-      state.galleryFolder = '';
-    }
+    const galleryHit = state.galleryFolder === path || state.galleryFolder.startsWith(`${path}/`);
+    if (galleryHit) state.galleryFolder = '';
     await loadFolders({ withStats: true });
+    if (galleryHit && state.view === 'gallery') {
+      state.galleryLoaded = false;
+      loadGallery(true);
+    }
   }
 }
 
@@ -479,6 +580,7 @@ function switchView(view) {
   els.tabUsers.setAttribute('aria-selected', String(view === 'users'));
 
   if (view === 'gallery' && !state.galleryLoaded) loadGallery(true);
+  if (view === 'gallery' && !state.folderStatsLoaded) loadFolders({ withStats: true });
   if (view === 'folders') loadFolders({ withStats: true });
   if (view === 'users' && !state.usersLoaded) loadUsers();
 }
@@ -783,7 +885,7 @@ async function loadGallery(reset = false) {
   try {
     const params = new URLSearchParams({ limit: '24' });
     if (!reset && state.cursor) params.set('cursor', state.cursor);
-    const folder = (els.galleryFolder?.value || state.galleryFolder || '').trim();
+    const folder = (state.galleryFolder || '').trim();
     const kind = (els.galleryKind?.value || state.galleryKind || '').trim();
     state.galleryFolder = folder;
     state.galleryKind = kind;
@@ -914,10 +1016,25 @@ function bindEvents() {
   els.uploadFolder?.addEventListener('change', () => {
     state.uploadFolder = els.uploadFolder.value;
   });
-  els.galleryFolder?.addEventListener('change', () => {
-    state.galleryFolder = els.galleryFolder.value;
-    state.galleryLoaded = false;
-    loadGallery(true);
+  els.galleryFolderBtn?.addEventListener('click', () => {
+    if (state.galleryFolderOpen) closeGalleryFolderMenu();
+    else openGalleryFolderMenu();
+  });
+  els.galleryFolderSearch?.addEventListener('input', () => renderGalleryFolderList());
+  els.galleryFolderList?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-folder]');
+    if (!btn || !els.galleryFolderList.contains(btn)) return;
+    setGalleryFolder(btn.dataset.folder || '');
+  });
+  els.galleryCrumbs?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-folder]');
+    if (!btn || !els.galleryCrumbs.contains(btn)) return;
+    setGalleryFolder(btn.dataset.folder || '');
+  });
+  document.addEventListener('click', (e) => {
+    if (!state.galleryFolderOpen) return;
+    if (els.galleryFolderPicker?.contains(e.target)) return;
+    closeGalleryFolderMenu();
   });
   els.galleryKind?.addEventListener('change', () => {
     state.galleryKind = els.galleryKind.value;
@@ -1018,11 +1135,17 @@ function bindEvents() {
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !els.authOverlay.hidden) closeAccountSheet();
+    if (e.key !== 'Escape') return;
+    if (state.galleryFolderOpen) {
+      closeGalleryFolderMenu();
+      return;
+    }
+    if (!els.authOverlay.hidden) closeAccountSheet();
   });
 }
 
 bindEvents();
+renderGalleryCrumbs();
 refreshMe().catch(() => {
   document.body.classList.remove('is-booting');
   showLoginScreen();
