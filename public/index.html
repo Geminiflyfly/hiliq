@@ -67,6 +67,12 @@
             支持拖拽、点击选择与剪贴板粘贴。边缘上传至 Cloudflare R2，账号由 D1 管理。
           </p>
 
+          <div id="setup-banner" class="setup-banner mt-8 hidden" role="status">
+            <p class="font-medium text-ink-950">首次使用：请先创建管理员账号</p>
+            <p class="mt-1 text-sm text-ink-600">创建后即可登录上传、管理画廊与用户。</p>
+            <button type="button" id="btn-setup-banner" class="btn-primary mt-4">初始化管理员</button>
+          </div>
+
           <div class="mt-10">
             <label id="dropzone" for="file-input" class="dropzone group" tabindex="0">
               <input id="file-input" type="file" accept="image/*" multiple class="sr-only" />

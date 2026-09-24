@@ -1,4 +1,4 @@
-import { countUsers, createSession, hashPassword, sessionCookieHeader, publicUser } from '../../auth.js';
+import { countUsers, createSession, ensureSchema, hashPassword, sessionCookieHeader, publicUser } from '../../auth.js';
 import { handleOptions, json, randomId } from '../../utils.js';
 
 export async function onRequestOptions() {
@@ -17,6 +17,7 @@ export async function onRequestPost(context) {
   }
 
   try {
+    await ensureSchema(env);
     const n = await countUsers(env);
     if (n > 0) {
       return json({ success: false, error: '已完成初始化，请直接登录' }, 400);

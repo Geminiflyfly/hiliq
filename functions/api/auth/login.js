@@ -1,5 +1,6 @@
 import {
   createSession,
+  ensureSchema,
   hashPassword,
   sessionCookieHeader,
   verifyPassword,
@@ -20,6 +21,7 @@ export async function onRequestPost(context) {
   }
 
   try {
+    await ensureSchema(env);
     const n = await countUsers(env);
     if (n === 0) {
       return json({

@@ -1,4 +1,4 @@
-import { hashPassword, requireUser, publicUser } from '../auth.js';
+import { ensureSchema, hashPassword, requireUser, publicUser } from '../auth.js';
 import { handleOptions, json, randomId } from '../utils.js';
 
 export async function onRequestOptions() {
@@ -16,6 +16,7 @@ export async function onRequestGet(context) {
   }
 
   try {
+    await ensureSchema(env);
     const { results } = await env.DB.prepare(
       'SELECT id, username, role, created_at FROM users ORDER BY created_at ASC',
     ).all();

@@ -18,6 +18,8 @@ const els = {
   btnMore: document.getElementById('btn-more'),
   btnRefresh: document.getElementById('btn-refresh'),
   btnAuth: document.getElementById('btn-auth'),
+  setupBanner: document.getElementById('setup-banner'),
+  btnSetupBanner: document.getElementById('btn-setup-banner'),
   authOverlay: document.getElementById('auth-overlay'),
   authTitle: document.getElementById('auth-title'),
   authHint: document.getElementById('auth-hint'),
@@ -111,6 +113,11 @@ function updateAuthUi() {
   const isAdmin = state.user?.role === 'admin';
   els.tabUsers.classList.toggle('hidden', !isAdmin);
 
+  if (els.setupBanner) {
+    const showSetup = Boolean(state.needSetup) && !state.user;
+    els.setupBanner.classList.toggle('hidden', !showSetup);
+  }
+
   if (state.user) {
     els.btnAuth.textContent = state.user.username;
     els.btnAuth.title = '账号';
@@ -152,11 +159,18 @@ function closeAuth() {
 }
 
 async function refreshMe() {
-  const { data } = await api('/api/auth/me');
+  const { res, data } = await api('/api/auth/me');
+  if (!res.ok && data?.error) {
+    showToast(data.error);
+  }
   state.user = data.user || null;
   state.needSetup = Boolean(data.needSetup);
   state.authEnabled = Boolean(data.authEnabled);
   updateAuthUi();
+  if (state.needSetup && !state.user) {
+    // Auto-open setup dialog once tables are ready
+    openAuth();
+  }
 }
 
 async function ensureAuthed() {
@@ -508,6 +522,7 @@ function bindEvents() {
   els.btnRefreshUsers.addEventListener('click', () => loadUsers());
 
   els.btnAuth.addEventListener('click', openAuth);
+  els.btnSetupBanner?.addEventListener('click', openAuth);
   els.btnCloseAuth.addEventListener('click', closeAuth);
   els.btnCloseAuthIn.addEventListener('click', closeAuth);
   els.authOverlay.addEventListener('click', (e) => {
