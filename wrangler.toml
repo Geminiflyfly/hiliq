@@ -8,8 +8,16 @@ pages_build_output_dir = "public"
 binding = "BUCKET"
 bucket_name = "vape-img"
 
+# D1 绑定：先在本机执行 `npx wrangler d1 create hiliq-db`
+# 把输出的 database_id 填到下面，再执行迁移：
+#   npx wrangler d1 migrations apply hiliq-db --remote
+[[d1_databases]]
+binding = "DB"
+database_name = "hiliq-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
 # CDN_URL = 图片专用域名（不要带 /img，也不要末尾 /）
-# 外链形如 https://img.kslit.com/文件夹/文件.png
 # pic.kslit.com 是站点域名，不要填到这里
 [vars]
 CDN_URL = "https://img.kslit.com"

@@ -1,4 +1,5 @@
-import { handleOptions, json, requireAuth } from '../utils.js';
+import { handleOptions, json } from '../utils.js';
+import { requireUser } from '../auth.js';
 
 export async function onRequestOptions() {
   return handleOptions();
@@ -7,11 +8,9 @@ export async function onRequestOptions() {
 async function deleteHandler(context) {
   const { request, env } = context;
 
-  const authError = requireAuth(request, env);
-  if (authError) return authError;
+  const gate = await requireUser(request, env);
+  if (gate.error) return gate.error;
 
-  // Require token for delete even if UPLOAD_TOKEN is unset — use a soft check:
-  // If no token configured, still allow delete (private deploy), but prefer setting UPLOAD_TOKEN.
   if (!env.BUCKET) {
     return json({ success: false, error: '未绑定 R2：请在 Pages 中绑定变量名 BUCKET' }, 500);
   }
@@ -39,7 +38,6 @@ async function deleteHandler(context) {
       return json({ success: false, error: '缺少参数 key' }, 400);
     }
 
-    // Basic path traversal guard
     if (key.includes('..') || key.startsWith('/')) {
       return json({ success: false, error: '非法的对象键' }, 400);
     }

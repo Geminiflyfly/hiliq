@@ -454,6 +454,34 @@ body {
   animation: rise-in 0.3s ease;
 }
 
+.user-form {
+  padding: 1.25rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.users-list {
+  display: grid;
+  gap: 0;
+}
+
+.user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.user-row .delete-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.hidden {
+  display: none !important;
+}
+
 .toast {
   position: fixed;
   left: 50%;

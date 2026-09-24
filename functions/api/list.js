@@ -1,4 +1,5 @@
-import { handleOptions, json, publicUrl, requireAuth } from '../utils.js';
+import { handleOptions, json, publicUrl } from '../utils.js';
+import { requireUser } from '../auth.js';
 
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
@@ -10,8 +11,8 @@ export async function onRequestOptions() {
 export async function onRequestGet(context) {
   const { request, env } = context;
 
-  const authError = requireAuth(request, env);
-  if (authError) return authError;
+  const gate = await requireUser(request, env);
+  if (gate.error) return gate.error;
 
   if (!env.BUCKET) {
     return json({ success: false, error: '未绑定 R2：请在 Pages 中绑定变量名 BUCKET' }, 500);

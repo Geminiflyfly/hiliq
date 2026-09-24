@@ -1,14 +1,14 @@
 /**
- * Hiliq frontend — upload, paste, gallery, multi-format links.
+ * Kslit frontend — auth, upload, gallery, user admin.
  */
-
-const TOKEN_KEY = 'hiliq_upload_token';
 
 const els = {
   tabUpload: document.getElementById('tab-upload'),
   tabGallery: document.getElementById('tab-gallery'),
+  tabUsers: document.getElementById('tab-users'),
   viewUpload: document.getElementById('view-upload'),
   viewGallery: document.getElementById('view-gallery'),
+  viewUsers: document.getElementById('view-users'),
   dropzone: document.getElementById('dropzone'),
   fileInput: document.getElementById('file-input'),
   progress: document.getElementById('upload-progress'),
@@ -17,12 +17,26 @@ const els = {
   galleryStatus: document.getElementById('gallery-status'),
   btnMore: document.getElementById('btn-more'),
   btnRefresh: document.getElementById('btn-refresh'),
-  btnSettings: document.getElementById('btn-settings'),
-  overlay: document.getElementById('settings-overlay'),
-  tokenInput: document.getElementById('token-input'),
-  btnSaveToken: document.getElementById('btn-save-token'),
-  btnClearToken: document.getElementById('btn-clear-token'),
-  btnCloseSettings: document.getElementById('btn-close-settings'),
+  btnAuth: document.getElementById('btn-auth'),
+  authOverlay: document.getElementById('auth-overlay'),
+  authTitle: document.getElementById('auth-title'),
+  authHint: document.getElementById('auth-hint'),
+  authForm: document.getElementById('auth-form'),
+  authLoggedIn: document.getElementById('auth-logged-in'),
+  authCurrentUser: document.getElementById('auth-current-user'),
+  authUsername: document.getElementById('auth-username'),
+  authPassword: document.getElementById('auth-password'),
+  btnAuthSubmit: document.getElementById('btn-auth-submit'),
+  btnLogout: document.getElementById('btn-logout'),
+  btnCloseAuth: document.getElementById('btn-close-auth'),
+  btnCloseAuthIn: document.getElementById('btn-close-auth-in'),
+  formCreateUser: document.getElementById('form-create-user'),
+  newUsername: document.getElementById('new-username'),
+  newPassword: document.getElementById('new-password'),
+  newRole: document.getElementById('new-role'),
+  usersStatus: document.getElementById('users-status'),
+  usersList: document.getElementById('users-list'),
+  btnRefreshUsers: document.getElementById('btn-refresh-users'),
   toast: document.getElementById('toast'),
 };
 
@@ -31,26 +45,25 @@ const state = {
   cursor: null,
   loadingGallery: false,
   galleryLoaded: false,
+  user: null,
+  needSetup: false,
+  authEnabled: false,
+  usersLoaded: false,
 };
 
-function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || '';
-}
-
-function setToken(value) {
-  const v = (value || '').trim();
-  if (v) localStorage.setItem(TOKEN_KEY, v);
-  else localStorage.removeItem(TOKEN_KEY);
-}
-
-function authHeaders(extra = {}) {
-  const token = getToken();
-  const headers = { ...extra };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-    headers['X-Upload-Token'] = token;
-  }
-  return headers;
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    credentials: 'include',
+    ...options,
+    headers: {
+      ...(options.body && !(options.body instanceof FormData)
+        ? { 'Content-Type': 'application/json' }
+        : {}),
+      ...options.headers,
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
 }
 
 let toastTimer;
@@ -82,23 +95,111 @@ async function copyText(text, button) {
   }
 }
 
-function switchView(view) {
-  state.view = view;
-  const isUpload = view === 'upload';
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
-  els.viewUpload.hidden = !isUpload;
-  els.viewGallery.hidden = isUpload;
-  els.viewUpload.classList.toggle('is-visible', isUpload);
-  els.viewGallery.classList.toggle('is-visible', !isUpload);
+function escapeAttr(str) {
+  return escapeHtml(str).replace(/'/g, '&#39;');
+}
 
-  els.tabUpload.classList.toggle('is-active', isUpload);
-  els.tabGallery.classList.toggle('is-active', !isUpload);
-  els.tabUpload.setAttribute('aria-selected', String(isUpload));
-  els.tabGallery.setAttribute('aria-selected', String(!isUpload));
+function updateAuthUi() {
+  const isAdmin = state.user?.role === 'admin';
+  els.tabUsers.classList.toggle('hidden', !isAdmin);
 
-  if (!isUpload && !state.galleryLoaded) {
-    loadGallery(true);
+  if (state.user) {
+    els.btnAuth.textContent = state.user.username;
+    els.btnAuth.title = '账号';
+  } else {
+    els.btnAuth.textContent = state.needSetup ? '初始化' : '登录';
+    els.btnAuth.title = state.needSetup ? '创建管理员' : '登录';
   }
+
+  if (state.view === 'users' && !isAdmin) {
+    switchView('upload');
+  }
+}
+
+function openAuth() {
+  const loggedIn = Boolean(state.user);
+  els.authLoggedIn.classList.toggle('hidden', !loggedIn);
+  els.authForm.classList.toggle('hidden', loggedIn);
+
+  if (loggedIn) {
+    els.authTitle.textContent = '账号';
+    els.authHint.textContent = '已登录，可退出或关闭。';
+    els.authCurrentUser.textContent = `${state.user.username}（${state.user.role === 'admin' ? '管理员' : '用户'}）`;
+  } else if (state.needSetup) {
+    els.authTitle.textContent = '初始化管理员';
+    els.authHint.textContent = '首次使用：创建管理员账号（存入 Cloudflare D1）。';
+    els.btnAuthSubmit.textContent = '创建并登录';
+  } else {
+    els.authTitle.textContent = '登录';
+    els.authHint.textContent = '使用 D1 账号登录后即可上传与管理图片。';
+    els.btnAuthSubmit.textContent = '登录';
+  }
+
+  els.authOverlay.hidden = false;
+  if (!loggedIn) els.authUsername.focus();
+}
+
+function closeAuth() {
+  els.authOverlay.hidden = true;
+}
+
+async function refreshMe() {
+  const { data } = await api('/api/auth/me');
+  state.user = data.user || null;
+  state.needSetup = Boolean(data.needSetup);
+  state.authEnabled = Boolean(data.authEnabled);
+  updateAuthUi();
+}
+
+async function ensureAuthed() {
+  if (state.user) return true;
+  if (!state.authEnabled) return true;
+  if (state.needSetup) {
+    showToast('请先初始化管理员账号');
+    openAuth();
+    return false;
+  }
+  showToast('请先登录');
+  openAuth();
+  return false;
+}
+
+function switchView(view) {
+  if (view === 'users' && state.user?.role !== 'admin') {
+    showToast('需要管理员权限');
+    return;
+  }
+
+  state.view = view;
+  const map = {
+    upload: els.viewUpload,
+    gallery: els.viewGallery,
+    users: els.viewUsers,
+  };
+
+  Object.entries(map).forEach(([name, el]) => {
+    const on = name === view;
+    el.hidden = !on;
+    el.classList.toggle('is-visible', on);
+  });
+
+  els.tabUpload.classList.toggle('is-active', view === 'upload');
+  els.tabGallery.classList.toggle('is-active', view === 'gallery');
+  els.tabUsers.classList.toggle('is-active', view === 'users');
+  els.tabUpload.setAttribute('aria-selected', String(view === 'upload'));
+  els.tabGallery.setAttribute('aria-selected', String(view === 'gallery'));
+  els.tabUsers.setAttribute('aria-selected', String(view === 'users'));
+
+  if (view === 'gallery' && !state.galleryLoaded) loadGallery(true);
+  if (view === 'users' && !state.usersLoaded) loadUsers();
 }
 
 function formatSize(bytes) {
@@ -122,7 +223,6 @@ function renderResult(data) {
   const formats = buildFormats(data);
   const item = document.createElement('article');
   item.className = 'result-item';
-
   const rows = [
     ['直链', formats.url],
     ['Markdown', formats.markdown],
@@ -131,7 +231,7 @@ function renderResult(data) {
   ];
 
   item.innerHTML = `
-    <img class="result-thumb" src="${formats.url}" alt="" loading="lazy" />
+    <img class="result-thumb" src="${escapeAttr(formats.url)}" alt="" loading="lazy" />
     <div>
       <p class="text-sm text-ink-600 mb-3">
         <span class="font-medium text-ink-950">${escapeHtml(data.key || '')}</span>
@@ -140,12 +240,12 @@ function renderResult(data) {
       <div class="result-links">
         ${rows
           .map(
-            ([label, value], i) => `
+            ([label, value]) => `
           <div class="link-row">
             <label>${label}</label>
-            <input type="text" readonly value="${escapeAttr(value)}" data-copy-index="${i}" />
+            <input type="text" readonly value="${escapeAttr(value)}" />
             <button type="button" class="copy-btn" data-copy="${escapeAttr(value)}">复制</button>
-          </div>`
+          </div>`,
           )
           .join('')}
       </div>
@@ -155,20 +255,7 @@ function renderResult(data) {
   item.querySelectorAll('.copy-btn').forEach((btn) => {
     btn.addEventListener('click', () => copyText(btn.dataset.copy, btn));
   });
-
   els.results.prepend(item);
-}
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function escapeAttr(str) {
-  return escapeHtml(str).replace(/'/g, '&#39;');
 }
 
 function setProgress(visible, percent = 0, label = '') {
@@ -189,27 +276,22 @@ async function uploadFile(file) {
     showToast(`已跳过非图片：${file.name || 'unknown'}`);
     return;
   }
+  if (!(await ensureAuthed())) return;
 
   const form = new FormData();
   form.append('file', file, file.name || 'image');
-
   setProgress(true, 15, `正在上传 ${file.name || '图片'}…`);
   els.dropzone.classList.add('is-busy');
 
   try {
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: form,
-    });
-
-    setProgress(true, 85, `处理响应…`);
-    const data = await res.json().catch(() => ({}));
-
+    const { res, data } = await api('/api/upload', { method: 'POST', body: form });
+    setProgress(true, 85, '处理响应…');
     if (!res.ok || !data.success) {
+      if (res.status === 401) {
+        openAuth();
+      }
       throw new Error(data.error || `上传失败 (${res.status})`);
     }
-
     setProgress(true, 100, '完成');
     renderResult(data);
     showToast('上传成功');
@@ -256,7 +338,6 @@ function onDrop(e) {
 async function handlePaste(e) {
   const items = e.clipboardData?.items;
   if (!items) return;
-
   const images = [];
   for (const item of items) {
     if (item.type.startsWith('image/')) {
@@ -265,7 +346,6 @@ async function handlePaste(e) {
     }
   }
   if (!images.length) return;
-
   e.preventDefault();
   await uploadFiles(images);
 }
@@ -292,19 +372,15 @@ function renderGalleryItems(images, append) {
 
     el.querySelector('.delete-btn').addEventListener('click', async (ev) => {
       const key = ev.currentTarget.dataset.key;
-      if (!key) return;
-      if (!confirm(`确认删除？\n${key}`)) return;
+      if (!key || !confirm(`确认删除？\n${key}`)) return;
+      if (!(await ensureAuthed())) return;
 
       try {
-        const res = await fetch('/api/delete', {
+        const { res, data } = await api('/api/delete', {
           method: 'POST',
-          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ key }),
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || '删除失败');
-        }
+        if (!res.ok || !data.success) throw new Error(data.error || '删除失败');
         el.remove();
         showToast('已删除');
       } catch (err) {
@@ -318,8 +394,12 @@ function renderGalleryItems(images, append) {
 
 async function loadGallery(reset = false) {
   if (state.loadingGallery) return;
-  state.loadingGallery = true;
+  if (!(await ensureAuthed())) {
+    els.galleryStatus.textContent = '请先登录后查看画廊';
+    return;
+  }
 
+  state.loadingGallery = true;
   if (reset) {
     state.cursor = null;
     els.galleryStatus.textContent = '加载中…';
@@ -330,12 +410,9 @@ async function loadGallery(reset = false) {
     const params = new URLSearchParams({ limit: '24' });
     if (!reset && state.cursor) params.set('cursor', state.cursor);
 
-    const res = await fetch(`/api/list?${params}`, {
-      headers: authHeaders(),
-    });
-    const data = await res.json().catch(() => ({}));
-
+    const { res, data } = await api(`/api/list?${params}`);
     if (!res.ok || !data.success) {
+      if (res.status === 401) openAuth();
       throw new Error(data.error || `加载失败 (${res.status})`);
     }
 
@@ -344,12 +421,9 @@ async function loadGallery(reset = false) {
     state.galleryLoaded = true;
 
     const totalShown = els.galleryGrid.children.length;
-    if (!totalShown) {
-      els.galleryStatus.textContent = '还没有图片，先去上传一张吧。';
-    } else {
-      els.galleryStatus.textContent = `已显示 ${totalShown} 张${data.truncated ? '（还有更多）' : ''}`;
-    }
-
+    els.galleryStatus.textContent = totalShown
+      ? `已显示 ${totalShown} 张${data.truncated ? '（还有更多）' : ''}`
+      : '还没有图片，先去上传一张吧。';
     els.btnMore.classList.toggle('hidden', !data.truncated);
   } catch (err) {
     els.galleryStatus.textContent = err.message || '加载失败';
@@ -358,19 +432,57 @@ async function loadGallery(reset = false) {
   }
 }
 
-function openSettings() {
-  els.tokenInput.value = getToken();
-  els.overlay.hidden = false;
-  els.tokenInput.focus();
-}
+async function loadUsers() {
+  els.usersStatus.textContent = '加载中…';
+  try {
+    const { res, data } = await api('/api/users');
+    if (!res.ok || !data.success) {
+      if (res.status === 401) openAuth();
+      throw new Error(data.error || '加载用户失败');
+    }
 
-function closeSettings() {
-  els.overlay.hidden = true;
+    const users = data.users || [];
+    state.usersLoaded = true;
+    els.usersStatus.textContent = `共 ${users.length} 个账号`;
+    els.usersList.innerHTML = users
+      .map(
+        (u) => `
+      <div class="user-row" data-id="${escapeAttr(u.id)}">
+        <div>
+          <p class="font-medium text-ink-950">${escapeHtml(u.username)}</p>
+          <p class="text-xs text-ink-400 mt-1">${u.role === 'admin' ? '管理员' : '用户'} · ${escapeHtml(u.createdAt || '')}</p>
+        </div>
+        <button type="button" class="delete-btn" data-id="${escapeAttr(u.id)}" data-name="${escapeAttr(u.username)}" ${u.id === state.user?.id ? 'disabled' : ''}>删除</button>
+      </div>`,
+      )
+      .join('');
+
+    els.usersList.querySelectorAll('.delete-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const name = btn.dataset.name;
+        if (!id || !confirm(`确认删除用户「${name}」？`)) return;
+        const { res: r, data: d } = await api(`/api/users?id=${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+        });
+        if (!r.ok || !d.success) {
+          showToast(d.error || '删除失败');
+          return;
+        }
+        showToast('已删除用户');
+        loadUsers();
+      });
+    });
+  } catch (err) {
+    els.usersStatus.textContent = err.message || '加载失败';
+    els.usersList.innerHTML = '';
+  }
 }
 
 function bindEvents() {
   els.tabUpload.addEventListener('click', () => switchView('upload'));
   els.tabGallery.addEventListener('click', () => switchView('gallery'));
+  els.tabUsers.addEventListener('click', () => switchView('users'));
 
   els.fileInput.addEventListener('change', () => {
     if (els.fileInput.files?.length) {
@@ -391,29 +503,74 @@ function bindEvents() {
   });
 
   document.addEventListener('paste', handlePaste);
-
   els.btnMore.addEventListener('click', () => loadGallery(false));
   els.btnRefresh.addEventListener('click', () => loadGallery(true));
+  els.btnRefreshUsers.addEventListener('click', () => loadUsers());
 
-  els.btnSettings.addEventListener('click', openSettings);
-  els.btnCloseSettings.addEventListener('click', closeSettings);
-  els.overlay.addEventListener('click', (e) => {
-    if (e.target === els.overlay) closeSettings();
+  els.btnAuth.addEventListener('click', openAuth);
+  els.btnCloseAuth.addEventListener('click', closeAuth);
+  els.btnCloseAuthIn.addEventListener('click', closeAuth);
+  els.authOverlay.addEventListener('click', (e) => {
+    if (e.target === els.authOverlay) closeAuth();
   });
-  els.btnSaveToken.addEventListener('click', () => {
-    setToken(els.tokenInput.value);
-    showToast(getToken() ? '令牌已保存' : '已清除令牌');
-    closeSettings();
+
+  els.authForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = els.authUsername.value.trim();
+    const password = els.authPassword.value;
+    const path = state.needSetup ? '/api/auth/setup' : '/api/auth/login';
+    const { res, data } = await api(path, {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok || !data.success) {
+      showToast(data.error || '失败');
+      return;
+    }
+    state.user = data.user;
+    state.needSetup = false;
+    els.authPassword.value = '';
+    updateAuthUi();
+    closeAuth();
+    showToast(path.includes('setup') ? '管理员已创建' : '登录成功');
   });
-  els.btnClearToken.addEventListener('click', () => {
-    els.tokenInput.value = '';
-    setToken('');
-    showToast('已清除令牌');
+
+  els.btnLogout.addEventListener('click', async () => {
+    await api('/api/auth/logout', { method: 'POST' });
+    state.user = null;
+    state.galleryLoaded = false;
+    state.usersLoaded = false;
+    updateAuthUi();
+    closeAuth();
+    showToast('已退出');
+    await refreshMe();
+  });
+
+  els.formCreateUser.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = els.newUsername.value.trim();
+    const password = els.newPassword.value;
+    const role = els.newRole.value;
+    const { res, data } = await api('/api/users', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, role }),
+    });
+    if (!res.ok || !data.success) {
+      showToast(data.error || '创建失败');
+      return;
+    }
+    els.newUsername.value = '';
+    els.newPassword.value = '';
+    showToast('用户已创建');
+    loadUsers();
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !els.overlay.hidden) closeSettings();
+    if (e.key === 'Escape' && !els.authOverlay.hidden) closeAuth();
   });
 }
 
 bindEvents();
+refreshMe().catch(() => {
+  updateAuthUi();
+});

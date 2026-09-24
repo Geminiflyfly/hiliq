@@ -6,8 +6,8 @@ import {
   linkFormats,
   publicUrl,
   randomId,
-  requireAuth,
 } from '../utils.js';
+import { requireUser } from '../auth.js';
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -18,8 +18,8 @@ export async function onRequestOptions() {
 export async function onRequestPost(context) {
   const { request, env } = context;
 
-  const authError = requireAuth(request, env);
-  if (authError) return authError;
+  const gate = await requireUser(request, env);
+  if (gate.error) return gate.error;
 
   if (!env.BUCKET) {
     return json({ success: false, error: '未绑定 R2：请在 Pages 中绑定变量名 BUCKET' }, 500);
