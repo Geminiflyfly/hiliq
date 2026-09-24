@@ -692,6 +692,11 @@ body.is-booting #app-shell {
   display: block;
 }
 
+.result-file-card {
+  margin: 0;
+  aspect-ratio: 1;
+}
+
 .result-links {
   display: grid;
   gap: 0.65rem;
