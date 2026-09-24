@@ -33,17 +33,19 @@ export async function onRequestGet(context) {
       include: ['httpMetadata', 'customMetadata'],
     });
 
-    const images = (listed.objects || []).map((obj) => {
-      const url = publicUrl(request, env, obj.key);
-      return {
-        key: obj.key,
-        url,
-        size: obj.size,
-        uploaded: obj.uploaded?.toISOString?.() || obj.uploaded || null,
-        contentType: obj.httpMetadata?.contentType || null,
-        originalName: obj.customMetadata?.originalName || null,
-      };
-    });
+    const images = (listed.objects || [])
+      .filter((obj) => obj.key && !obj.key.endsWith('/') && obj.size > 0)
+      .map((obj) => {
+        const url = publicUrl(request, env, obj.key);
+        return {
+          key: obj.key,
+          url,
+          size: obj.size,
+          uploaded: obj.uploaded?.toISOString?.() || obj.uploaded || null,
+          contentType: obj.httpMetadata?.contentType || null,
+          originalName: obj.customMetadata?.originalName || null,
+        };
+      });
 
     return json({
       success: true,

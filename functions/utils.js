@@ -89,12 +89,32 @@ export function randomId(length = 10) {
   return out;
 }
 
+/** Encode each path segment so spaces/unicode work in URLs. */
+export function encodeObjectKey(key) {
+  return String(key)
+    .split('/')
+    .map((seg) => encodeURIComponent(seg))
+    .join('/');
+}
+
+/** Decode a URL path key back to the R2 object key. */
+export function decodeObjectKey(raw) {
+  const value = String(raw || '');
+  try {
+    // decodeURIComponent handles %20; replace bare + only in query, not path
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 /** Build public image URL: CDN_URL override, else same-origin /img/{key}. */
 export function publicUrl(request, env, key) {
+  const encoded = encodeObjectKey(key);
   const base = (env.CDN_URL || '').replace(/\/+$/, '');
-  if (base) return `${base}/${key}`;
+  if (base) return `${base}/${encoded}`;
   const url = new URL(request.url);
-  return `${url.origin}/img/${key}`;
+  return `${url.origin}/img/${encoded}`;
 }
 
 export function linkFormats(url, filename = 'image') {

@@ -103,12 +103,22 @@ npx wrangler pages deploy public --project-name=hiliq
 
 部署后确认 `wrangler.toml` 中的 `bucket_name` 与 R2 桶名一致，并按需配置环境变量。
 
-### （可选）R2 自定义域名
+### （推荐）R2 自定义域名
 
-若希望链接直达 R2 而不走 Pages 代理：
+若桶已绑定自定义域名（例如 `https://pic.kslit.com`）：
 
-1. 为 R2 桶绑定自定义域名，或开启 `r2.dev` 公共访问。
-2. 设置 `CDN_URL` 为该域名（不要末尾斜杠），例如 `https://cdn.example.com`。
+1. 在 `wrangler.toml` 的 `[vars]` 中设置（或在 Pages「变量和机密」里设置）：
+
+   ```toml
+   CDN_URL = "https://pic.kslit.com"
+   ```
+
+2. 外链**不要**加 `/img`，文件夹名里的空格要编码为 `%20`：
+
+   - ✅ `https://pic.kslit.com/fizzy%2050k/01-Watermelon-Ice--Strawberry-Kiwi.png`
+   - ❌ `https://pic.kslit.com/img/fizzy 50k/01-....png`（多了 `/img`，且空格未编码 → 404）
+
+未设置 `CDN_URL` 时，链接走 Pages 代理：`https://你的Pages域名/img/<key>`。
 
 ## API 说明
 
