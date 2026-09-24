@@ -101,7 +101,7 @@ npx wrangler pages project create hiliq
 npx wrangler pages deploy public --project-name=hiliq
 ```
 
-部署后仍需在 Dashboard 为该 Pages 项目绑定 R2（`BUCKET`）并配置环境变量。
+部署后确认 `wrangler.toml` 中的 `bucket_name` 与 R2 桶名一致，并按需配置环境变量。
 
 ### （可选）R2 自定义域名
 
