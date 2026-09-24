@@ -9,9 +9,11 @@ const els = {
   loginSub: document.getElementById('login-sub'),
   tabUpload: document.getElementById('tab-upload'),
   tabGallery: document.getElementById('tab-gallery'),
+  tabFolders: document.getElementById('tab-folders'),
   tabUsers: document.getElementById('tab-users'),
   viewUpload: document.getElementById('view-upload'),
   viewGallery: document.getElementById('view-gallery'),
+  viewFolders: document.getElementById('view-folders'),
   viewUsers: document.getElementById('view-users'),
   dropzone: document.getElementById('dropzone'),
   fileInput: document.getElementById('file-input'),
@@ -19,6 +21,11 @@ const els = {
   galleryFolder: document.getElementById('gallery-folder'),
   btnNewFolder: document.getElementById('btn-new-folder'),
   btnNewSubfolder: document.getElementById('btn-new-subfolder'),
+  btnRefreshFolders: document.getElementById('btn-refresh-folders'),
+  formCreateFolder: document.getElementById('form-create-folder'),
+  manageFolderName: document.getElementById('manage-folder-name'),
+  foldersStatus: document.getElementById('folders-status'),
+  foldersTree: document.getElementById('folders-tree'),
   progress: document.getElementById('upload-progress'),
   results: document.getElementById('upload-results'),
   galleryGrid: document.getElementById('gallery-grid'),
@@ -57,6 +64,7 @@ const state = {
   usersLoaded: false,
   folders: [],
   foldersLoaded: false,
+  folderItems: [],
   uploadFolder: '',
   galleryFolder: '',
 };
@@ -226,19 +234,141 @@ function fillFolderSelects(preferredUpload) {
   }
 }
 
-async function loadFolders() {
+async function loadFolders({ withStats = false } = {}) {
   try {
-    const { res, data } = await api('/api/folders');
+    const q = withStats ? '?stats=1' : '';
+    const { res, data } = await api(`/api/folders${q}`);
     if (!res.ok || !data.success) {
       throw new Error(data.error || '加载文件夹失败');
     }
     state.folders = data.folders || [];
+    state.folderItems = data.items || state.folders.map((path) => ({
+      path,
+      depth: path.split('/').length - 1,
+      childCount: 0,
+    }));
     state.foldersLoaded = true;
     fillFolderSelects();
+    if (state.view === 'folders') renderFoldersTree();
   } catch (err) {
     console.warn(err);
     state.folders = state.folders || [];
     fillFolderSelects();
+    if (els.foldersStatus) {
+      els.foldersStatus.textContent = err.message || '加载失败';
+    }
+  }
+}
+
+function renderFoldersTree() {
+  if (!els.foldersTree) return;
+  const items = state.folderItems || [];
+  if (!items.length) {
+    els.foldersStatus.textContent = '还没有文件夹，可在上方创建。';
+    els.foldersTree.innerHTML = '';
+    return;
+  }
+  els.foldersStatus.textContent = `共 ${items.length} 个文件夹`;
+  els.foldersTree.innerHTML = items
+    .map((item) => {
+      const path = item.path;
+      const pad = '··'.repeat(item.depth || 0);
+      const files = item.files != null ? `${item.files} 张图` : '';
+      const kids = item.childCount ? `${item.childCount} 子目录` : '';
+      const meta = [files, kids].filter(Boolean).join(' · ') || '空目录';
+      return `
+      <div class="folder-row" data-path="${escapeAttr(path)}">
+        <div class="folder-row-main">
+          <p class="folder-row-path">${pad ? `<span class="text-ink-200">${escapeHtml(pad)} </span>` : ''}${escapeHtml(path)}</p>
+          <p class="folder-row-meta">${escapeHtml(meta)}</p>
+        </div>
+        <div class="folder-row-actions">
+          <button type="button" class="btn-ghost" data-act="upload">上传</button>
+          <button type="button" class="btn-ghost" data-act="gallery">画廊</button>
+          <button type="button" class="btn-ghost" data-act="sub">子目录</button>
+          <button type="button" class="btn-ghost" data-act="rename">重命名</button>
+          <button type="button" class="delete-btn" data-act="delete">删除</button>
+        </div>
+      </div>`;
+    })
+    .join('');
+
+  els.foldersTree.querySelectorAll('.folder-row').forEach((row) => {
+    const path = row.dataset.path;
+    row.querySelectorAll('[data-act]').forEach((btn) => {
+      btn.addEventListener('click', () => handleFolderAction(btn.dataset.act, path));
+    });
+  });
+}
+
+async function handleFolderAction(act, path) {
+  if (!path) return;
+  if (act === 'upload') {
+    rememberFolder(path);
+    fillFolderSelects(path);
+    switchView('upload');
+    showToast(`上传目标：${path}`);
+    return;
+  }
+  if (act === 'gallery') {
+    rememberFolder(path);
+    fillFolderSelects();
+    if (els.galleryFolder) els.galleryFolder.value = path;
+    state.galleryFolder = path;
+    state.galleryLoaded = false;
+    switchView('gallery');
+    return;
+  }
+  if (act === 'sub') {
+    if (els.uploadFolder) els.uploadFolder.value = path;
+    state.uploadFolder = path;
+    await createFolder({ asSub: true });
+    await loadFolders({ withStats: true });
+    return;
+  }
+  if (act === 'rename') {
+    const leaf = path.split('/').pop();
+    const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+    const nextLeaf = prompt('新名称（仅本级目录名）', leaf);
+    if (nextLeaf == null) return;
+    const trimmed = nextLeaf.trim().replace(/\//g, '');
+    if (!trimmed) {
+      showToast('名称不能为空');
+      return;
+    }
+    const to = parent ? `${parent}/${trimmed}` : trimmed;
+    if (to === path) return;
+    if (!confirm(`将「${path}」重命名为「${to}」？\n会移动该目录下全部文件。`)) return;
+    const { res, data } = await api('/api/folders', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'rename', from: path, to }),
+    });
+    if (!res.ok || !data.success) {
+      showToast(data.error || '重命名失败');
+      return;
+    }
+    showToast(`已重命名（移动 ${data.moved || 0} 个对象）`);
+    state.foldersLoaded = false;
+    await loadFolders({ withStats: true });
+    return;
+  }
+  if (act === 'delete') {
+    if (!confirm(`确认删除文件夹「${path}」及其下全部图片？此操作不可恢复。`)) return;
+    const { res, data } = await api(`/api/folders?folder=${encodeURIComponent(path)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok || !data.success) {
+      showToast(data.error || '删除失败');
+      return;
+    }
+    showToast(data.message || '已删除');
+    if (state.uploadFolder === path || state.uploadFolder.startsWith(`${path}/`)) {
+      state.uploadFolder = '';
+    }
+    if (state.galleryFolder === path || state.galleryFolder.startsWith(`${path}/`)) {
+      state.galleryFolder = '';
+    }
+    await loadFolders({ withStats: true });
   }
 }
 
@@ -294,6 +424,9 @@ async function createFolder({ asSub = false } = {}) {
   rememberFolder(folder);
   fillFolderSelects(folder);
   showToast(`已选择：${folder}`);
+  if (state.view === 'folders') {
+    await loadFolders({ withStats: true });
+  }
 }
 
 function getSelectedUploadFolder() {
@@ -317,10 +450,12 @@ function switchView(view) {
   const map = {
     upload: els.viewUpload,
     gallery: els.viewGallery,
+    folders: els.viewFolders,
     users: els.viewUsers,
   };
 
   Object.entries(map).forEach(([name, el]) => {
+    if (!el) return;
     const on = name === view;
     el.hidden = !on;
     el.classList.toggle('is-visible', on);
@@ -328,12 +463,15 @@ function switchView(view) {
 
   els.tabUpload.classList.toggle('is-active', view === 'upload');
   els.tabGallery.classList.toggle('is-active', view === 'gallery');
+  els.tabFolders?.classList.toggle('is-active', view === 'folders');
   els.tabUsers.classList.toggle('is-active', view === 'users');
   els.tabUpload.setAttribute('aria-selected', String(view === 'upload'));
   els.tabGallery.setAttribute('aria-selected', String(view === 'gallery'));
+  els.tabFolders?.setAttribute('aria-selected', String(view === 'folders'));
   els.tabUsers.setAttribute('aria-selected', String(view === 'users'));
 
   if (view === 'gallery' && !state.galleryLoaded) loadGallery(true);
+  if (view === 'folders') loadFolders({ withStats: true });
   if (view === 'users' && !state.usersLoaded) loadUsers();
 }
 
@@ -626,6 +764,7 @@ async function loadUsers() {
 function bindEvents() {
   els.tabUpload.addEventListener('click', () => switchView('upload'));
   els.tabGallery.addEventListener('click', () => switchView('gallery'));
+  els.tabFolders?.addEventListener('click', () => switchView('folders'));
   els.tabUsers.addEventListener('click', () => switchView('users'));
 
   els.fileInput.addEventListener('change', () => {
@@ -655,6 +794,25 @@ function bindEvents() {
   els.btnRefreshUsers.addEventListener('click', () => loadUsers());
   els.btnNewFolder?.addEventListener('click', () => createFolder({ asSub: false }));
   els.btnNewSubfolder?.addEventListener('click', () => createFolder({ asSub: true }));
+  els.btnRefreshFolders?.addEventListener('click', () => loadFolders({ withStats: true }));
+  els.formCreateFolder?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = (els.manageFolderName?.value || '').trim();
+    if (!name) return;
+    const { res, data } = await api('/api/folders', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok || !data.success) {
+      showToast(data.error || '创建失败');
+      return;
+    }
+    els.manageFolderName.value = '';
+    rememberFolder(data.folder || name);
+    fillFolderSelects(data.folder || name);
+    showToast(`已创建：${data.folder || name}`);
+    await loadFolders({ withStats: true });
+  });
   els.uploadFolder?.addEventListener('change', () => {
     state.uploadFolder = els.uploadFolder.value;
   });

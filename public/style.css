@@ -518,6 +518,61 @@ body.is-booting #app-shell {
   color: var(--ink-400);
 }
 
+.folders-tree {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+
+.folder-row {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.95rem 0;
+  border-bottom: 1px solid var(--line);
+  animation: rise-in 0.35s ease both;
+}
+
+@media (min-width: 720px) {
+  .folder-row {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+}
+
+.folder-row-main {
+  min-width: 0;
+}
+
+.folder-row-path {
+  font-weight: 600;
+  color: var(--ink-950);
+  word-break: break-all;
+}
+
+.folder-row-meta {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--ink-400);
+}
+
+.folder-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.folder-row-actions .btn-ghost,
+.folder-row-actions .delete-btn,
+.folder-row-actions .copy-btn {
+  font-size: 0.72rem;
+  padding: 0.45rem 0.65rem;
+}
+
+.folder-manage-create {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
 .folder-bar-actions {
   display: flex;
   flex-wrap: wrap;
