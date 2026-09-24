@@ -491,6 +491,25 @@ body.is-booting #app-shell {
   }
 }
 
+.folder-bar-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.folder-select {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+}
+
+.folder-select-sm {
+  min-width: 10rem;
+  margin-top: 0;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.85rem;
+}
+
 .dropzone {
   position: relative;
   display: block;

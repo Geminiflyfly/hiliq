@@ -1,4 +1,4 @@
-import { handleOptions, json, publicUrl } from '../utils.js';
+import { folderFromKey, handleOptions, json, normalizeFolder, publicUrl } from '../utils.js';
 import { requireUser } from '../auth.js';
 
 const DEFAULT_LIMIT = 24;
@@ -25,7 +25,11 @@ export async function onRequestGet(context) {
     limit = Math.min(limit, MAX_LIMIT);
 
     const cursor = searchParams.get('cursor') || undefined;
-    const prefix = searchParams.get('prefix') || undefined;
+    const folder = normalizeFolder(searchParams.get('folder') || searchParams.get('prefix') || '');
+    if (folder === null) {
+      return json({ success: false, error: '文件夹路径非法' }, 400);
+    }
+    const prefix = folder ? `${folder}/` : undefined;
 
     const listed = await env.BUCKET.list({
       limit,
@@ -35,12 +39,19 @@ export async function onRequestGet(context) {
     });
 
     const images = (listed.objects || [])
-      .filter((obj) => obj.key && !obj.key.endsWith('/') && obj.size > 0)
+      .filter((obj) => {
+        if (!obj.key || obj.key.endsWith('/') || obj.size <= 0) return false;
+        if (obj.key.endsWith('/.keep')) return false;
+        if (obj.customMetadata?.folderMarker === '1') return false;
+        return true;
+      })
       .map((obj) => {
         const url = publicUrl(request, env, obj.key);
+        const f = obj.customMetadata?.folder || folderFromKey(obj.key);
         return {
           key: obj.key,
           url,
+          folder: f || '',
           size: obj.size,
           uploaded: obj.uploaded?.toISOString?.() || obj.uploaded || null,
           contentType: obj.httpMetadata?.contentType || null,
@@ -51,6 +62,7 @@ export async function onRequestGet(context) {
     return json({
       success: true,
       images,
+      folder: folder || '',
       truncated: Boolean(listed.truncated),
       cursor: listed.truncated ? listed.cursor : null,
       count: images.length,

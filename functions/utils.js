@@ -128,4 +128,38 @@ export function linkFormats(url, filename = 'image') {
   };
 }
 
+/**
+ * Normalize a folder path for R2 keys.
+ * Returns '' for root, or "name/sub" without leading/trailing slashes.
+ */
+export function normalizeFolder(raw) {
+  let folder = String(raw || '')
+    .replace(/\\/g, '/')
+    .trim();
+  folder = folder.replace(/^\/+|\/+$/g, '');
+  if (!folder) return '';
+  if (folder.includes('..')) return null;
+  // Disallow control chars; allow spaces / unicode (e.g. "fizzy 50k")
+  if (/[\u0000-\u001f]/.test(folder)) return null;
+  // Collapse duplicate slashes
+  folder = folder.replace(/\/+/g, '/');
+  if (folder.length > 180) return null;
+  return folder;
+}
+
+/** Build object key: optional folder + inverted timestamp filename. */
+export function buildObjectKey(folder, ext, date = new Date()) {
+  const invTs = String(9_999_999_999_999 - date.getTime());
+  const name = `${invTs}-${randomId(8)}.${ext}`;
+  return folder ? `${folder}/${name}` : name;
+}
+
+/** First path segment as folder label; empty = root. */
+export function folderFromKey(key) {
+  const k = String(key || '');
+  const i = k.indexOf('/');
+  if (i <= 0) return '';
+  return k.slice(0, i);
+}
+
 export { ALLOWED_TYPES, EXT_MAP };

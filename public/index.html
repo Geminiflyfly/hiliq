@@ -107,7 +107,17 @@
               拖拽、点选或剪贴板粘贴，边缘直传 Cloudflare R2。
             </p>
 
-            <div class="mt-10">
+            <div class="folder-bar mt-8 max-w-xl">
+              <label class="field-label" for="upload-folder">上传到文件夹</label>
+              <div class="folder-bar-row mt-2">
+                <select id="upload-folder" class="field folder-select" aria-label="选择文件夹">
+                  <option value="">根目录</option>
+                </select>
+                <button type="button" id="btn-new-folder" class="btn-ghost">新建</button>
+              </div>
+            </div>
+
+            <div class="mt-6">
               <label id="dropzone" for="file-input" class="dropzone group" tabindex="0">
                 <input id="file-input" type="file" accept="image/*" multiple class="sr-only" />
                 <span class="dropzone-ring" aria-hidden="true"></span>
@@ -132,7 +142,12 @@
               <h2 id="gallery-title" class="font-display text-4xl font-800 tracking-tight text-ink-950 sm:text-5xl">画廊</h2>
               <p class="mt-2 text-sm text-ink-600">浏览、复制链接或删除。</p>
             </div>
-            <button type="button" id="btn-refresh" class="btn-ghost">刷新</button>
+            <div class="flex flex-wrap items-center gap-2">
+              <select id="gallery-folder" class="field folder-select-sm" aria-label="按文件夹筛选">
+                <option value="">全部</option>
+              </select>
+              <button type="button" id="btn-refresh" class="btn-ghost">刷新</button>
+            </div>
           </div>
           <div id="gallery-status" class="mt-6 text-sm text-ink-400" aria-live="polite">加载中…</div>
           <div id="gallery-grid" class="gallery-grid mt-8"></div>

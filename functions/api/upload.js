@@ -1,11 +1,13 @@
 import {
+  buildObjectKey,
   extFromType,
+  folderFromKey,
   handleOptions,
   isAllowedType,
   json,
   linkFormats,
+  normalizeFolder,
   publicUrl,
-  randomId,
 } from '../utils.js';
 import { requireUser } from '../auth.js';
 
@@ -28,10 +30,12 @@ export async function onRequestPost(context) {
   try {
     const contentType = request.headers.get('Content-Type') || '';
     let file;
+    let folderRaw = '';
 
     if (contentType.includes('multipart/form-data')) {
       const form = await request.formData();
       file = form.get('file') || form.get('image');
+      folderRaw = form.get('folder') || form.get('prefix') || '';
       if (!file || typeof file === 'string') {
         return json({ success: false, error: '请使用字段名 file 上传图片' }, 400);
       }
@@ -41,11 +45,17 @@ export async function onRequestPost(context) {
         return json({ success: false, error: '请求体为空' }, 400);
       }
       file = new File([buffer], `paste.${extFromType(contentType)}`, { type: contentType });
+      folderRaw = new URL(request.url).searchParams.get('folder') || '';
     } else {
       return json({
         success: false,
         error: '请使用 multipart/form-data 或直接发送 image/* 请求体',
       }, 400);
+    }
+
+    const folder = normalizeFolder(folderRaw);
+    if (folder === null) {
+      return json({ success: false, error: '文件夹路径非法' }, 400);
     }
 
     if (!isAllowedType(file.type)) {
@@ -64,9 +74,7 @@ export async function onRequestPost(context) {
 
     const ext = extFromType(file.type);
     const date = new Date();
-    // Inverted timestamp prefix → R2 lexicographic list ≈ newest first
-    const invTs = String(9_999_999_999_999 - date.getTime());
-    const key = `${invTs}-${randomId(8)}.${ext}`;
+    const key = buildObjectKey(folder, ext, date);
 
     const arrayBuffer = await file.arrayBuffer();
     await env.BUCKET.put(key, arrayBuffer, {
@@ -77,6 +85,7 @@ export async function onRequestPost(context) {
       customMetadata: {
         originalName: file.name || '',
         uploadedAt: date.toISOString(),
+        folder: folder || '',
       },
     });
 
@@ -86,6 +95,8 @@ export async function onRequestPost(context) {
     return json({
       success: true,
       key,
+      folder: folder || '',
+      folderLabel: folderFromKey(key) || folder || '',
       size: file.size,
       contentType: file.type,
       uploadedAt: date.toISOString(),

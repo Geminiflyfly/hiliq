@@ -15,6 +15,9 @@ const els = {
   viewUsers: document.getElementById('view-users'),
   dropzone: document.getElementById('dropzone'),
   fileInput: document.getElementById('file-input'),
+  uploadFolder: document.getElementById('upload-folder'),
+  galleryFolder: document.getElementById('gallery-folder'),
+  btnNewFolder: document.getElementById('btn-new-folder'),
   progress: document.getElementById('upload-progress'),
   results: document.getElementById('upload-results'),
   galleryGrid: document.getElementById('gallery-grid'),
@@ -51,6 +54,10 @@ const state = {
   needSetup: false,
   authEnabled: false,
   usersLoaded: false,
+  folders: [],
+  foldersLoaded: false,
+  uploadFolder: '',
+  galleryFolder: '',
 };
 
 async function api(path, options = {}) {
@@ -137,6 +144,9 @@ function showAppShell() {
   if (state.user) {
     els.btnAuth.textContent = state.user.username;
   }
+  if (!state.foldersLoaded) {
+    loadFolders();
+  }
   if (state.view === 'users' && !isAdmin) {
     switchView('upload');
   } else {
@@ -176,6 +186,77 @@ async function refreshMe() {
   state.needSetup = Boolean(data.needSetup);
   state.authEnabled = Boolean(data.authEnabled);
   updateAuthUi();
+}
+
+function fillFolderSelects(preferredUpload) {
+  const folders = state.folders || [];
+  const uploadVal = preferredUpload ?? els.uploadFolder?.value ?? state.uploadFolder ?? '';
+  const galleryVal = els.galleryFolder?.value ?? state.galleryFolder ?? '';
+
+  if (els.uploadFolder) {
+    els.uploadFolder.innerHTML =
+      `<option value="">根目录</option>` +
+      folders.map((f) => `<option value="${escapeAttr(f)}">${escapeHtml(f)}</option>`).join('');
+    if (uploadVal && [...els.uploadFolder.options].some((o) => o.value === uploadVal)) {
+      els.uploadFolder.value = uploadVal;
+    }
+    state.uploadFolder = els.uploadFolder.value;
+  }
+
+  if (els.galleryFolder) {
+    els.galleryFolder.innerHTML =
+      `<option value="">全部</option>` +
+      folders.map((f) => `<option value="${escapeAttr(f)}">${escapeHtml(f)}</option>`).join('');
+    if (galleryVal && [...els.galleryFolder.options].some((o) => o.value === galleryVal)) {
+      els.galleryFolder.value = galleryVal;
+    }
+    state.galleryFolder = els.galleryFolder.value;
+  }
+}
+
+async function loadFolders() {
+  try {
+    const { res, data } = await api('/api/folders');
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || '加载文件夹失败');
+    }
+    state.folders = data.folders || [];
+    state.foldersLoaded = true;
+    fillFolderSelects();
+  } catch (err) {
+    console.warn(err);
+    state.folders = state.folders || [];
+    fillFolderSelects();
+  }
+}
+
+async function createFolder() {
+  const name = prompt('新文件夹名称（可含空格，如 fizzy 50k）');
+  if (name == null) return;
+  const trimmed = name.trim();
+  if (!trimmed) {
+    showToast('名称不能为空');
+    return;
+  }
+  const { res, data } = await api('/api/folders', {
+    method: 'POST',
+    body: JSON.stringify({ name: trimmed }),
+  });
+  if (!res.ok || !data.success) {
+    showToast(data.error || '创建失败');
+    return;
+  }
+  const folder = data.folder || trimmed;
+  if (!state.folders.includes(folder)) {
+    state.folders.push(folder);
+    state.folders.sort((a, b) => a.localeCompare(b, 'zh'));
+  }
+  fillFolderSelects(folder);
+  showToast(`已选择文件夹：${folder}`);
+}
+
+function getSelectedUploadFolder() {
+  return (els.uploadFolder?.value || '').trim();
 }
 
 async function ensureAuthed() {
@@ -248,6 +329,7 @@ function renderResult(data) {
     <div>
       <p class="text-sm text-ink-600 mb-3">
         <span class="font-medium text-ink-950">${escapeHtml(data.key || '')}</span>
+        ${data.folder ? ` · <span class="text-tide-500">${escapeHtml(data.folder)}</span>` : ''}
         ${data.size != null ? ` · ${formatSize(data.size)}` : ''}
       </p>
       <div class="result-links">
@@ -293,7 +375,9 @@ async function uploadFile(file) {
 
   const form = new FormData();
   form.append('file', file, file.name || 'image');
-  setProgress(true, 15, `正在上传 ${file.name || '图片'}…`);
+  const folder = getSelectedUploadFolder();
+  if (folder) form.append('folder', folder);
+  setProgress(true, 15, `正在上传 ${file.name || '图片'}${folder ? ` → ${folder}` : ''}…`);
   els.dropzone.classList.add('is-busy');
 
   try {
@@ -305,8 +389,13 @@ async function uploadFile(file) {
     }
     setProgress(true, 100, '完成');
     renderResult(data);
-    showToast('上传成功');
+    showToast(folder ? `已上传到 ${folder}` : '上传成功');
     state.galleryLoaded = false;
+    if (folder && !state.folders.includes(folder)) {
+      state.folders.push(folder);
+      state.folders.sort((a, b) => a.localeCompare(b, 'zh'));
+      fillFolderSelects(folder);
+    }
   } catch (err) {
     showToast(err.message || '上传失败');
   } finally {
@@ -421,6 +510,9 @@ async function loadGallery(reset = false) {
   try {
     const params = new URLSearchParams({ limit: '24' });
     if (!reset && state.cursor) params.set('cursor', state.cursor);
+    const folder = (els.galleryFolder?.value || state.galleryFolder || '').trim();
+    state.galleryFolder = folder;
+    if (folder) params.set('folder', folder);
 
     const { res, data } = await api(`/api/list?${params}`);
     if (!res.ok || !data.success) {
@@ -516,8 +608,20 @@ function bindEvents() {
 
   document.addEventListener('paste', handlePaste);
   els.btnMore.addEventListener('click', () => loadGallery(false));
-  els.btnRefresh.addEventListener('click', () => loadGallery(true));
+  els.btnRefresh.addEventListener('click', () => {
+    state.galleryLoaded = false;
+    loadGallery(true);
+  });
   els.btnRefreshUsers.addEventListener('click', () => loadUsers());
+  els.btnNewFolder?.addEventListener('click', createFolder);
+  els.uploadFolder?.addEventListener('change', () => {
+    state.uploadFolder = els.uploadFolder.value;
+  });
+  els.galleryFolder?.addEventListener('change', () => {
+    state.galleryFolder = els.galleryFolder.value;
+    state.galleryLoaded = false;
+    loadGallery(true);
+  });
 
   els.btnAuth.addEventListener('click', openAccountSheet);
   els.btnCloseAuthIn.addEventListener('click', closeAccountSheet);
