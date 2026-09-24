@@ -38,6 +38,8 @@ npx wrangler login
 npx wrangler d1 create hiliq-db
 ```
 
+若已在控制台创建（例如本项目的 `img-db`），可跳过 create，直接把名称和 ID 写入 `wrangler.toml`。
+
 命令会输出类似：
 
 ```toml
