@@ -32,7 +32,7 @@
       },
     };
   </script>
-  <link rel="stylesheet" href="./style.css?v=files2" />
+  <link rel="stylesheet" href="./style.css?v=files3" />
 </head>
 <body class="font-sans text-ink-950 antialiased is-booting">
   <div class="atmosphere" aria-hidden="true"></div>
@@ -144,12 +144,23 @@
 
       <section id="view-gallery" class="view" hidden aria-labelledby="gallery-title">
         <div class="mx-auto max-w-5xl px-5 pb-20 pt-6 sm:px-8 sm:pt-10">
-          <div class="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h2 id="gallery-title" class="font-display text-4xl font-800 tracking-tight text-ink-950 sm:text-5xl">文件库</h2>
-              <p class="mt-2 text-sm text-ink-600">浏览、筛选、批量移动或删除。</p>
+          <div>
+            <h2 id="gallery-title" class="font-display text-4xl font-800 tracking-tight text-ink-950 sm:text-5xl">文件库</h2>
+            <p class="mt-2 text-sm text-ink-600">浏览、筛选、批量移动或删除。</p>
+          </div>
+
+          <div class="gallery-toolbar mt-6">
+            <div class="folder-picker" id="gallery-folder-picker">
+              <button type="button" id="gallery-folder-btn" class="folder-picker-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="gallery-folder-list">
+                <span id="gallery-folder-label" class="folder-picker-label">全部文件夹</span>
+                <span class="folder-picker-caret" aria-hidden="true"></span>
+              </button>
+              <div id="gallery-folder-menu" class="folder-picker-menu" hidden>
+                <input id="gallery-folder-search" class="field folder-picker-search" type="search" placeholder="搜索文件夹路径" autocomplete="off" aria-label="搜索文件夹" />
+                <div id="gallery-folder-list" class="folder-picker-list" role="listbox" aria-label="文件夹"></div>
+              </div>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="gallery-toolbar-side">
               <select id="gallery-kind" class="field folder-select-sm" aria-label="按类型筛选">
                 <option value="">全部类型</option>
                 <option value="image">图片</option>
@@ -158,12 +169,11 @@
                 <option value="document">文档</option>
                 <option value="archive">压缩包</option>
               </select>
-              <select id="gallery-folder" class="field folder-select-sm" aria-label="按文件夹筛选">
-                <option value="">全部文件夹</option>
-              </select>
               <button type="button" id="btn-refresh" class="btn-ghost">刷新</button>
             </div>
           </div>
+
+          <nav id="gallery-crumbs" class="gallery-crumbs" aria-label="当前文件夹"></nav>
 
           <div id="batch-bar" class="batch-bar mt-6 hidden">
             <label class="batch-check">
@@ -258,6 +268,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-  <script src="./app.js?v=files2" type="module"></script>
+  <script src="./app.js?v=files3" type="module"></script>
 </body>
 </html>
