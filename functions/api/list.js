@@ -38,32 +38,42 @@ export async function onRequestGet(context) {
       return json({ success: false, error: '文件夹路径非法' }, 400);
     }
     const kindFilter = (searchParams.get('kind') || '').trim().toLowerCase();
+    const query = (searchParams.get('q') || '').trim().toLowerCase();
     const prefix = folder ? `${folder}/` : undefined;
+    const filtering = Boolean(kindFilter || query);
 
-    // Fetch extra when filtering by kind (client-side filter on page)
-    const listed = await env.BUCKET.list({
-      limit: kindFilter ? Math.min(limit * 3, MAX_LIMIT) : limit,
-      cursor,
-      prefix,
-      include: ['httpMetadata', 'customMetadata'],
-    });
+    const files = [];
+    let pageCursor = cursor;
+    let truncated = false;
+    let scanned = 0;
+    const scanCap = filtering ? 800 : limit;
 
-    let files = (listed.objects || [])
-      .filter((obj) => {
-        if (!obj.key || obj.key.endsWith('/') || obj.size <= 0) return false;
-        if (obj.key.endsWith('/.keep')) return false;
-        if (obj.customMetadata?.folderMarker === '1') return false;
-        return true;
-      })
-      .map((obj) => {
-        const url = publicUrl(request, env, obj.key);
-        const f = obj.customMetadata?.folder || folderFromKey(obj.key);
+    while (files.length < limit && scanned < scanCap) {
+      const pageSize = filtering ? 100 : limit;
+      const listed = await env.BUCKET.list({
+        limit: pageSize,
+        cursor: pageCursor,
+        prefix,
+        include: ['httpMetadata', 'customMetadata'],
+      });
+      const objects = listed.objects || [];
+      scanned += objects.length;
+
+      for (const obj of objects) {
+        if (!obj.key || obj.key.endsWith('/') || obj.size <= 0) continue;
+        if (obj.key.endsWith('/.keep')) continue;
+        if (obj.customMetadata?.folderMarker === '1') continue;
+        if (obj.customMetadata?.hidden === '1') continue;
         const contentType = obj.httpMetadata?.contentType || null;
         const originalName = obj.customMetadata?.originalName || null;
         const kind = obj.customMetadata?.kind || kindFromType(contentType, originalName || obj.key);
-        return {
+        if (kindFilter && kind !== kindFilter) continue;
+        const hay = `${originalName || ''} ${obj.key}`.toLowerCase();
+        if (query && !hay.includes(query)) continue;
+        const f = obj.customMetadata?.folder || folderFromKey(obj.key);
+        files.push({
           key: obj.key,
-          url,
+          url: publicUrl(request, env, obj.key),
           folder: f || '',
           kind,
           kindLabel: kindLabel(kind),
@@ -71,11 +81,17 @@ export async function onRequestGet(context) {
           uploaded: obj.uploaded?.toISOString?.() || obj.uploaded || null,
           contentType,
           originalName,
-        };
-      });
+        });
+      }
 
-    if (kindFilter) {
-      files = files.filter((f) => f.kind === kindFilter).slice(0, limit);
+      if (!listed.truncated) {
+        truncated = false;
+        pageCursor = null;
+        break;
+      }
+      truncated = true;
+      pageCursor = listed.cursor;
+      if (!filtering) break;
     }
 
     return json({
@@ -84,8 +100,9 @@ export async function onRequestGet(context) {
       files,
       folder: folder || '',
       kind: kindFilter || '',
-      truncated: Boolean(listed.truncated),
-      cursor: listed.truncated ? listed.cursor : null,
+      query,
+      truncated,
+      cursor: truncated ? pageCursor : null,
       count: files.length,
     });
   } catch (err) {

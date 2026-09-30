@@ -26,6 +26,7 @@ body {
   background: var(--ink-50);
   color: var(--ink-950);
   overflow-x: hidden;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", Sora, sans-serif;
 }
 
 body.is-booting #view-login,
@@ -799,6 +800,134 @@ body.is-booting #app-shell {
   padding: 0.1rem 0.4rem;
 }
 
+.gallery-query {
+  min-width: 12rem;
+  margin-top: 0;
+}
+
+@media (max-width: 720px) {
+  #tab-users {
+    display: none !important;
+  }
+}
+
+.upload-queue {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.upload-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 0.75rem;
+  padding: 0.7rem 0.8rem;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--line);
+}
+
+.upload-row-name {
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-row-meta {
+  font-size: 0.72rem;
+  color: var(--ink-400);
+}
+
+.upload-row .progress-bar {
+  grid-column: 1 / -1;
+}
+
+.batch-bar:not(.hidden) {
+  position: sticky;
+  bottom: 0.75rem;
+  z-index: 25;
+  box-shadow: var(--shadow-soft);
+}
+
+.gallery-kind {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  z-index: 2;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink-950);
+  background: rgba(255, 255, 255, 0.88);
+  padding: 0.15rem 0.35rem;
+}
+
+.gallery-meta {
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--ink-400);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gallery-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: inherit;
+  color: inherit;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 3.5rem 1.25rem 1.25rem;
+  background: rgba(11, 31, 28, 0.82);
+}
+
+.lightbox[hidden] {
+  display: none !important;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  border: 0;
+  background: #fff;
+  font: inherit;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+
+.lightbox-stage {
+  max-width: min(960px, 100%);
+  max-height: 100%;
+}
+
+.lightbox-stage img,
+.lightbox-stage video {
+  max-width: 100%;
+  max-height: calc(100vh - 6rem);
+  display: block;
+  margin: 0 auto;
+}
+
+.dialog-folder-list {
+  max-height: 14rem;
+  overflow: auto;
+  margin-top: 0.6rem;
+}
+
 .dropzone {
   position: relative;
   display: block;
@@ -1012,7 +1141,7 @@ body.is-booting #app-shell {
   position: absolute;
   top: 0.45rem;
   left: 0.45rem;
-  z-index: 2;
+  z-index: 3;
   width: 1.1rem;
   height: 1.1rem;
   cursor: pointer;
