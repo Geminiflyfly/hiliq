@@ -1,5 +1,4 @@
 import {
-  buildObjectKey,
   extFromFilename,
   folderFromKey,
   handleOptions,
@@ -62,16 +61,17 @@ export async function onRequestPost(context) {
         }
 
         const baseName = oldKey.split('/').pop() || oldKey;
-        const ext = extFromFilename(baseName) || 'bin';
-        // Keep unique name but preserve original leaf when possible
-        const date = new Date();
-        let newKey = buildObjectKey(folder, ext, date);
-        // Prefer readable leaf: folder/originalName if unique-ish
         const originalName = obj.customMetadata?.originalName || baseName;
-        const safeLeaf = String(originalName).replace(/[\\/]/g, '_').slice(0, 120);
-        if (safeLeaf && safeLeaf.includes('.')) {
-          const candidate = folder ? `${folder}/${Date.now()}-${safeLeaf}` : `${Date.now()}-${safeLeaf}`;
-          if (!candidate.includes('..')) newKey = candidate;
+        let leaf = baseName;
+        let newKey = folder ? `${folder}/${leaf}` : leaf;
+        if (newKey !== oldKey) {
+          const taken = await env.BUCKET.head(newKey);
+          if (taken && taken.customMetadata?.hidden !== '1') {
+            const ext = extFromFilename(leaf);
+            const stem = ext ? leaf.slice(0, -(ext.length + 1)) : leaf;
+            leaf = ext ? `${stem}-${Date.now()}.${ext}` : `${stem}-${Date.now()}`;
+            newKey = folder ? `${folder}/${leaf}` : leaf;
+          }
         }
 
         if (newKey === oldKey) {
@@ -79,17 +79,29 @@ export async function onRequestPost(context) {
           continue;
         }
 
-        await env.BUCKET.put(newKey, obj.body, {
+        const bytes = await obj.arrayBuffer();
+        const meta = {
+          ...(obj.customMetadata || {}),
+          folder: folder || '',
+          originalName,
+          movedFrom: oldKey,
+          movedAt: new Date().toISOString(),
+        };
+        delete meta.hidden;
+        delete meta.movedTo;
+        await env.BUCKET.put(newKey, bytes, {
+          httpMetadata: obj.httpMetadata,
+          customMetadata: meta,
+        });
+        // Keep the old object so existing CDN links still return the file.
+        await env.BUCKET.put(oldKey, bytes, {
           httpMetadata: obj.httpMetadata,
           customMetadata: {
             ...(obj.customMetadata || {}),
-            folder: folder || '',
-            originalName: obj.customMetadata?.originalName || originalName,
-            movedFrom: oldKey,
-            movedAt: new Date().toISOString(),
+            hidden: '1',
+            movedTo: newKey,
           },
         });
-        await env.BUCKET.delete(oldKey);
         moved.push({
           from: oldKey,
           key: newKey,

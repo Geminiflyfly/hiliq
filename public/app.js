@@ -17,8 +17,17 @@ const els = {
   viewUsers: document.getElementById('view-users'),
   dropzone: document.getElementById('dropzone'),
   fileInput: document.getElementById('file-input'),
-  uploadFolder: document.getElementById('upload-folder'),
+  uploadTarget: document.getElementById('upload-target'),
+  uploadFolderPicker: document.getElementById('upload-folder-picker'),
+  uploadFolderBtn: document.getElementById('upload-folder-btn'),
+  uploadFolderLabel: document.getElementById('upload-folder-label'),
+  uploadFolderMenu: document.getElementById('upload-folder-menu'),
+  uploadFolderSearch: document.getElementById('upload-folder-search'),
+  uploadFolderList: document.getElementById('upload-folder-list'),
+  uploadQueue: document.getElementById('upload-queue'),
+  btnClearResults: document.getElementById('btn-clear-results'),
   galleryKind: document.getElementById('gallery-kind'),
+  galleryQuery: document.getElementById('gallery-query'),
   galleryFolderPicker: document.getElementById('gallery-folder-picker'),
   galleryFolderBtn: document.getElementById('gallery-folder-btn'),
   galleryFolderLabel: document.getElementById('gallery-folder-label'),
@@ -40,8 +49,20 @@ const els = {
   batchBar: document.getElementById('batch-bar'),
   batchSelectAll: document.getElementById('batch-select-all'),
   batchCount: document.getElementById('batch-count'),
+  btnBatchCopy: document.getElementById('btn-batch-copy'),
+  btnBatchMd: document.getElementById('btn-batch-md'),
+  btnBatchHtml: document.getElementById('btn-batch-html'),
   btnBatchMove: document.getElementById('btn-batch-move'),
   btnBatchDelete: document.getElementById('btn-batch-delete'),
+  btnManageUsers: document.getElementById('btn-manage-users'),
+  dialogOverlay: document.getElementById('dialog-overlay'),
+  dialogTitle: document.getElementById('dialog-title'),
+  dialogBody: document.getElementById('dialog-body'),
+  dialogConfirm: document.getElementById('dialog-confirm'),
+  dialogCancel: document.getElementById('dialog-cancel'),
+  lightbox: document.getElementById('lightbox'),
+  lightboxClose: document.getElementById('lightbox-close'),
+  lightboxStage: document.getElementById('lightbox-stage'),
   btnMore: document.getElementById('btn-more'),
   btnRefresh: document.getElementById('btn-refresh'),
   btnAuth: document.getElementById('btn-auth'),
@@ -81,8 +102,13 @@ const state = {
   galleryFolder: '',
   galleryKind: '',
   galleryFolderOpen: false,
+  uploadFolderOpen: false,
   folderStatsLoaded: false,
+  galleryQuery: '',
   selectedKeys: new Set(),
+  filesByKey: new Map(),
+  queue: [],
+  uploading: false,
 };
 
 async function api(path, options = {}) {
@@ -166,6 +192,7 @@ function showAppShell() {
   els.appShell.hidden = false;
   const isAdmin = state.user?.role === 'admin';
   els.tabUsers.classList.toggle('hidden', !isAdmin);
+  els.btnManageUsers?.classList.toggle('hidden', !isAdmin);
   if (state.user) {
     els.btnAuth.textContent = state.user.username;
   }
@@ -222,27 +249,36 @@ function folderOptionLabel(path) {
 }
 
 function fillFolderSelects(preferredUpload) {
-  const folders = state.folders || [];
-  const uploadVal = preferredUpload ?? els.uploadFolder?.value ?? state.uploadFolder ?? '';
-
-  const optionsHtml = folders
-    .map(
-      (f) =>
-        `<option value="${escapeAttr(f)}">${escapeHtml(folderOptionLabel(f))}</option>`,
-    )
-    .join('');
-
-  if (els.uploadFolder) {
-    els.uploadFolder.innerHTML = `<option value="">根目录</option>${optionsHtml}`;
-    if (uploadVal && [...els.uploadFolder.options].some((o) => o.value === uploadVal)) {
-      els.uploadFolder.value = uploadVal;
-    }
-    state.uploadFolder = els.uploadFolder.value;
-  }
-
+  if (preferredUpload != null) state.uploadFolder = preferredUpload;
+  renderUploadFolderButton();
+  renderUploadFolderList();
+  renderUploadTarget();
   renderGalleryFolderButton();
   renderGalleryCrumbs();
   renderGalleryFolderList();
+}
+
+function renderUploadTarget() {
+  if (!els.uploadTarget) return;
+  const path = state.uploadFolder || '';
+  els.uploadTarget.textContent = path
+    ? `将上传到 ${path.split('/').join(' / ')}`
+    : '将上传到根目录';
+}
+
+function renderUploadFolderButton() {
+  if (!els.uploadFolderLabel) return;
+  els.uploadFolderLabel.textContent = state.uploadFolder || '根目录';
+  els.uploadFolderBtn?.setAttribute('aria-expanded', String(state.uploadFolderOpen));
+}
+
+function renderUploadFolderList() {
+  if (!els.uploadFolderList) return;
+  renderFolderChoices(els.uploadFolderList, {
+    query: els.uploadFolderSearch?.value || '',
+    current: state.uploadFolder || '',
+    emptyLabel: '根目录',
+  });
 }
 
 function folderMeta(item) {
@@ -279,17 +315,15 @@ function renderGalleryCrumbs() {
   els.galleryCrumbs.innerHTML = bits.join('');
 }
 
-function renderGalleryFolderList() {
-  if (!els.galleryFolderList) return;
-  const q = (els.galleryFolderSearch?.value || '').trim().toLowerCase();
+function renderFolderChoices(container, { query = '', current = '', emptyLabel = '全部文件夹' } = {}) {
+  const q = String(query || '').trim().toLowerCase();
   const items = (state.folderItems || []).filter((item) => {
     if (!q) return true;
     return String(item.path || '').toLowerCase().includes(q);
   });
-  const current = state.galleryFolder || '';
   const allRow = `
     <button type="button" class="folder-opt${current ? '' : ' is-current'}" role="option" data-folder="" aria-selected="${!current}">
-      <span class="folder-opt-leaf">全部文件夹</span>
+      <span class="folder-opt-leaf">${escapeHtml(emptyLabel)}</span>
     </button>
     <div class="folder-picker-sep"></div>`;
   const rows = items.length
@@ -308,7 +342,16 @@ function renderGalleryFolderList() {
         })
         .join('')
     : `<p class="folder-opt-empty">${q ? '没有匹配的文件夹' : '还没有文件夹'}</p>`;
-  els.galleryFolderList.innerHTML = allRow + rows;
+  container.innerHTML = allRow + rows;
+}
+
+function renderGalleryFolderList() {
+  if (!els.galleryFolderList) return;
+  renderFolderChoices(els.galleryFolderList, {
+    query: els.galleryFolderSearch?.value || '',
+    current: state.galleryFolder || '',
+    emptyLabel: '全部文件夹',
+  });
 }
 
 function openGalleryFolderMenu() {
@@ -326,6 +369,30 @@ function closeGalleryFolderMenu() {
   state.galleryFolderOpen = false;
   if (els.galleryFolderMenu) els.galleryFolderMenu.hidden = true;
   renderGalleryFolderButton();
+}
+
+function openUploadFolderMenu() {
+  if (!els.uploadFolderMenu) return;
+  state.uploadFolderOpen = true;
+  els.uploadFolderMenu.hidden = false;
+  renderUploadFolderButton();
+  if (els.uploadFolderSearch) els.uploadFolderSearch.value = '';
+  renderUploadFolderList();
+  els.uploadFolderSearch?.focus();
+  if (!state.folderStatsLoaded) loadFolders({ withStats: true });
+}
+
+function closeUploadFolderMenu() {
+  state.uploadFolderOpen = false;
+  if (els.uploadFolderMenu) els.uploadFolderMenu.hidden = true;
+  renderUploadFolderButton();
+}
+
+function setUploadFolder(path) {
+  state.uploadFolder = String(path || '');
+  closeUploadFolderMenu();
+  renderUploadFolderList();
+  renderUploadTarget();
 }
 
 function setGalleryFolder(path) {
@@ -426,8 +493,8 @@ async function handleFolderAction(act, path) {
     return;
   }
   if (act === 'sub') {
-    if (els.uploadFolder) els.uploadFolder.value = path;
     state.uploadFolder = path;
+    renderUploadTarget();
     await createFolder({ asSub: true });
     await loadFolders({ withStats: true });
     return;
@@ -435,9 +502,14 @@ async function handleFolderAction(act, path) {
   if (act === 'rename') {
     const leaf = path.split('/').pop();
     const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-    const nextLeaf = prompt('新名称（仅本级目录名）', leaf);
+    const nextLeaf = await openDialog({
+      title: '重命名文件夹',
+      html: `<label class="field-label" for="dialog-input">新名称</label><input id="dialog-input" class="field" value="${escapeAttr(leaf)}" />`,
+      confirmText: '重命名',
+      getValue: () => document.getElementById('dialog-input')?.value ?? '',
+    });
     if (nextLeaf == null) return;
-    const trimmed = nextLeaf.trim().replace(/\//g, '');
+    const trimmed = String(nextLeaf).trim().replace(/\//g, '');
     if (!trimmed) {
       showToast('名称不能为空');
       return;
@@ -505,9 +577,19 @@ async function createFolder({ asSub = false } = {}) {
       showToast('请先选择父文件夹，再新建子目录');
       return;
     }
-    name = prompt(`在「${current}」下新建子目录名称`);
+    name = await openDialog({
+      title: `在「${current}」下新建子目录`,
+      html: `<label class="field-label" for="dialog-input">子目录名称</label><input id="dialog-input" class="field" placeholder="春季" />`,
+      confirmText: '创建',
+      getValue: () => document.getElementById('dialog-input')?.value ?? '',
+    });
   } else {
-    name = prompt('新文件夹路径（可多级，如 产品/春季）');
+    name = await openDialog({
+      title: '新建文件夹',
+      html: `<label class="field-label" for="dialog-input">路径</label><input id="dialog-input" class="field" placeholder="产品/春季" />`,
+      confirmText: '创建',
+      getValue: () => document.getElementById('dialog-input')?.value ?? '',
+    });
   }
 
   if (name == null) return;
@@ -539,7 +621,35 @@ async function createFolder({ asSub = false } = {}) {
 }
 
 function getSelectedUploadFolder() {
-  return (els.uploadFolder?.value || '').trim();
+  return (state.uploadFolder || '').trim();
+}
+
+function openDialog({ title, html, confirmText = '确定', getValue, onMount }) {
+  return new Promise((resolve) => {
+    if (!els.dialogOverlay) {
+      resolve(null);
+      return;
+    }
+    els.dialogTitle.textContent = title;
+    els.dialogBody.innerHTML = html;
+    els.dialogConfirm.textContent = confirmText;
+    els.dialogOverlay.hidden = false;
+    const input = els.dialogBody.querySelector('input, textarea');
+    onMount?.();
+    input?.focus();
+
+    const finish = (value) => {
+      els.dialogOverlay.hidden = true;
+      els.dialogConfirm.onclick = null;
+      els.dialogCancel.onclick = null;
+      resolve(value);
+    };
+    els.dialogConfirm.onclick = () => finish(getValue ? getValue() : true);
+    els.dialogCancel.onclick = () => finish(null);
+    els.dialogOverlay.onclick = (e) => {
+      if (e.target === els.dialogOverlay) finish(null);
+    };
+  });
 }
 
 async function ensureAuthed() {
@@ -650,57 +760,140 @@ function renderResult(data) {
   els.results.prepend(item);
 }
 
-function setProgress(visible, percent = 0, label = '') {
-  if (!visible) {
-    els.progress.classList.add('hidden');
-    els.progress.innerHTML = '';
-    return;
-  }
-  els.progress.classList.remove('hidden');
-  els.progress.innerHTML = `
-    <p class="mb-2 text-sm text-ink-600">${escapeHtml(label)}</p>
-    <div class="progress-bar"><span style="width:${percent}%"></span></div>
-  `;
+function renderQueue() {
+  if (!els.uploadQueue) return;
+  els.uploadQueue.innerHTML = state.queue
+    .map((item) => {
+      const status = item.status === 'done'
+        ? '完成'
+        : item.status === 'error'
+          ? (item.error || '失败')
+          : item.status === 'cancelled'
+            ? '已取消'
+            : item.status === 'uploading'
+              ? `${item.progress}%`
+              : '等待';
+      return `
+      <li class="upload-row" data-id="${escapeAttr(item.id)}">
+        <span class="upload-row-name">${escapeHtml(item.file.name || '文件')}</span>
+        <span class="upload-row-meta">${escapeHtml(status)}</span>
+        <div class="progress-bar"><span style="width:${item.progress || 0}%"></span></div>
+        ${item.status === 'queued' || item.status === 'uploading'
+          ? `<button type="button" class="btn-ghost queue-cancel" data-id="${escapeAttr(item.id)}">取消</button>`
+          : ''}
+      </li>`;
+    })
+    .join('');
+  els.uploadQueue.querySelectorAll('.queue-cancel').forEach((btn) => {
+    btn.addEventListener('click', () => cancelQueueItem(btn.dataset.id));
+  });
 }
 
-async function uploadFile(file) {
-  if (!(await ensureAuthed())) return;
+function cancelQueueItem(id) {
+  const item = state.queue.find((row) => row.id === id);
+  if (!item) return;
+  item.cancelled = true;
+  if (item.status === 'uploading' && item.xhr) item.xhr.abort();
+  if (item.status === 'queued') {
+    item.status = 'cancelled';
+    renderQueue();
+  }
+}
 
+function uploadOne(item) {
   const form = new FormData();
-  form.append('file', file, file.name || 'file');
+  form.append('file', item.file, item.file.name || 'file');
   const folder = getSelectedUploadFolder();
   if (folder) form.append('folder', folder);
-  setProgress(true, 15, `正在上传 ${file.name || '文件'}${folder ? ` → ${folder}` : ''}…`);
-  els.dropzone.classList.add('is-busy');
+  item.folder = folder;
 
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    item.xhr = xhr;
+    xhr.open('POST', '/api/upload');
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (ev) => {
+      if (!ev.lengthComputable) return;
+      item.progress = Math.round((ev.loaded / ev.total) * 100);
+      renderQueue();
+    };
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText || '{}'); } catch { data = {}; }
+      if (xhr.status === 401) showLoginScreen();
+      if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+        item.status = 'done';
+        item.progress = 100;
+        item.result = data;
+        resolve(data);
+      } else {
+        item.status = 'error';
+        item.error = data.error || `失败 (${xhr.status})`;
+        resolve(null);
+      }
+    };
+    xhr.onerror = () => {
+      item.status = 'error';
+      item.error = '网络错误';
+      resolve(null);
+    };
+    xhr.onabort = () => {
+      item.status = 'cancelled';
+      resolve(null);
+    };
+    xhr.send(form);
+  });
+}
+
+async function drainQueue() {
+  if (state.uploading) return;
+  state.uploading = true;
+  els.dropzone.classList.add('is-busy');
   try {
-    const { res, data } = await api('/api/upload', { method: 'POST', body: form });
-    setProgress(true, 85, '处理响应…');
-    if (!res.ok || !data.success) {
-      if (res.status === 401) showLoginScreen();
-      throw new Error(data.error || `上传失败 (${res.status})`);
+    while (state.queue.some((item) => item.status === 'queued')) {
+      const item = state.queue.find((row) => row.status === 'queued');
+      if (!item || item.cancelled) {
+        if (item) item.status = 'cancelled';
+        continue;
+      }
+      item.status = 'uploading';
+      item.progress = 0;
+      renderQueue();
+      const data = await uploadOne(item);
+      renderQueue();
+      if (data) {
+        renderResult(data);
+        els.btnClearResults?.classList.remove('hidden');
+        state.galleryLoaded = false;
+        if (item.folder) {
+          rememberFolder(item.folder);
+          fillFolderSelects(item.folder);
+        }
+      }
     }
-    setProgress(true, 100, '完成');
-    renderResult(data);
-    showToast(folder ? `已上传到 ${folder}` : '上传成功');
-    state.galleryLoaded = false;
-    if (folder) {
-      rememberFolder(folder);
-      fillFolderSelects(folder);
-    }
-  } catch (err) {
-    showToast(err.message || '上传失败');
   } finally {
+    state.uploading = false;
     els.dropzone.classList.remove('is-busy');
-    setTimeout(() => setProgress(false), 500);
+    const done = state.queue.filter((item) => item.status === 'done').length;
+    const failed = state.queue.filter((item) => item.status === 'error').length;
+    if (done || failed) showToast(`完成 ${done} 个${failed ? `，失败 ${failed} 个` : ''}`);
   }
 }
 
 async function uploadFiles(fileList) {
+  if (!(await ensureAuthed())) return;
   const files = [...fileList].filter(Boolean);
+  if (!files.length) return;
   for (const file of files) {
-    await uploadFile(file);
+    state.queue.push({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      file,
+      status: 'queued',
+      progress: 0,
+    });
   }
+  renderQueue();
+  drainQueue();
 }
 
 function onDrag(e) {
@@ -731,24 +924,28 @@ async function handlePaste(e) {
   if (els.appShell.hidden) return;
   const items = e.clipboardData?.items;
   if (!items) return;
-  const images = [];
+  const files = [];
   for (const item of items) {
-    if (item.type.startsWith('image/')) {
+    if (item.kind === 'file') {
       const file = item.getAsFile();
-      if (file) images.push(file);
+      if (file) files.push(file);
     }
   }
-  if (!images.length) return;
+  if (!files.length) return;
   e.preventDefault();
-  await uploadFiles(images);
+  await uploadFiles(files);
 }
 
 function updateBatchBar() {
   const n = state.selectedKeys.size;
   if (els.batchBar) els.batchBar.classList.toggle('hidden', false);
   if (els.batchCount) els.batchCount.textContent = `已选 ${n}`;
-  if (els.btnBatchMove) els.btnBatchMove.disabled = n === 0;
-  if (els.btnBatchDelete) els.btnBatchDelete.disabled = n === 0;
+  const off = n === 0;
+  if (els.btnBatchCopy) els.btnBatchCopy.disabled = off;
+  if (els.btnBatchMd) els.btnBatchMd.disabled = off;
+  if (els.btnBatchHtml) els.btnBatchHtml.disabled = off;
+  if (els.btnBatchMove) els.btnBatchMove.disabled = off;
+  if (els.btnBatchDelete) els.btnBatchDelete.disabled = off;
   if (els.batchSelectAll && els.galleryGrid) {
     const boxes = [...els.galleryGrid.querySelectorAll('.gallery-check')];
     els.batchSelectAll.checked = boxes.length > 0 && boxes.every((b) => b.checked);
@@ -770,31 +967,32 @@ function renderGalleryItems(images, append) {
   if (!append) {
     els.galleryGrid.innerHTML = '';
     state.selectedKeys.clear();
+    state.filesByKey = new Map();
   }
 
   for (const img of images) {
+    state.filesByKey.set(img.key, img);
     const el = document.createElement('figure');
     el.className = 'gallery-item';
     el.dataset.key = img.key;
     const isImage = (img.kind || 'image') === 'image';
     const title = img.originalName || img.key.split('/').pop() || img.key;
+    const when = img.uploaded ? String(img.uploaded).slice(0, 10) : '';
+    const meta = [img.size != null ? formatSize(img.size) : '', when].filter(Boolean).join(' · ');
     const preview = isImage
-      ? `<a href="${escapeAttr(img.url)}" target="_blank" rel="noopener noreferrer">
-           <img src="${escapeAttr(img.url)}" alt="" loading="lazy" />
-         </a>`
-      : `<a class="file-card" href="${escapeAttr(img.url)}" target="_blank" rel="noopener noreferrer">
+      ? `<img src="${escapeAttr(img.url)}" alt="" loading="lazy" />`
+      : `<span class="file-card">
            <span class="file-card-kind">${escapeHtml(img.kindLabel || img.kind || '文件')}</span>
            <span class="file-card-name">${escapeHtml(title)}</span>
-         </a>`;
+         </span>`;
 
     el.innerHTML = `
       <input type="checkbox" class="gallery-check" data-key="${escapeAttr(img.key)}" aria-label="选择" />
-      ${preview}
-      <div class="gallery-actions">
-        <button type="button" class="copy-btn" data-url="${escapeAttr(img.url)}">复制链接</button>
-        <button type="button" class="btn-ghost btn-move" data-key="${escapeAttr(img.key)}">移动</button>
-        <button type="button" class="delete-btn" data-key="${escapeAttr(img.key)}">删除</button>
-      </div>
+      <button type="button" class="gallery-open" data-key="${escapeAttr(img.key)}">
+        ${preview}
+        <span class="gallery-kind">${escapeHtml(img.kindLabel || '文件')}</span>
+      </button>
+      <figcaption class="gallery-meta">${escapeHtml(meta || title)}</figcaption>
     `;
 
     el.querySelector('.gallery-check').addEventListener('change', (ev) => {
@@ -809,47 +1007,82 @@ function renderGalleryItems(images, append) {
       updateBatchBar();
     });
 
-    el.querySelector('.copy-btn').addEventListener('click', (ev) => {
-      copyText(ev.currentTarget.dataset.url, ev.currentTarget);
-    });
-
-    el.querySelector('.btn-move').addEventListener('click', async () => {
-      await moveKeys([img.key]);
-    });
-
-    el.querySelector('.delete-btn').addEventListener('click', async (ev) => {
-      const key = ev.currentTarget.dataset.key;
-      if (!key || !confirm(`确认删除？\n${key}`)) return;
-      if (!(await ensureAuthed())) return;
-      try {
-        const { res, data } = await api('/api/delete', {
-          method: 'POST',
-          body: JSON.stringify({ key }),
-        });
-        if (!res.ok || !data.success) throw new Error(data.error || '删除失败');
-        state.selectedKeys.delete(key);
-        el.remove();
-        updateBatchBar();
-        showToast('已删除');
-      } catch (err) {
-        showToast(err.message || '删除失败');
-      }
-    });
-
+    el.querySelector('.gallery-open').addEventListener('click', () => openLightbox(img));
     els.galleryGrid.appendChild(el);
   }
   updateBatchBar();
 }
 
+function openLightbox(file) {
+  if (!els.lightbox || !file) return;
+  const kind = file.kind || 'image';
+  const title = file.originalName || file.key;
+  let inner = '';
+  if (kind === 'image') {
+    inner = `<img src="${escapeAttr(file.url)}" alt="${escapeAttr(title)}" />`;
+  } else if (kind === 'video') {
+    inner = `<video src="${escapeAttr(file.url)}" controls autoplay></video>`;
+  } else if (kind === 'audio') {
+    inner = `<audio src="${escapeAttr(file.url)}" controls autoplay></audio><p class="mt-3 text-sm text-white">${escapeHtml(title)}</p>`;
+  } else {
+    inner = `<a class="btn-primary" href="${escapeAttr(file.url)}" target="_blank" rel="noopener">${escapeHtml(title)}</a>`;
+  }
+  els.lightboxStage.innerHTML = inner;
+  els.lightbox.hidden = false;
+}
+
+function closeLightbox() {
+  if (!els.lightbox) return;
+  els.lightbox.hidden = true;
+  els.lightboxStage.innerHTML = '';
+}
+
+function selectedLinkText(format) {
+  const files = [...state.selectedKeys].map((key) => state.filesByKey.get(key)).filter(Boolean);
+  return files.map((file) => {
+    const name = file.originalName || file.key.split('/').pop() || 'file';
+    if (format === 'md') {
+      return file.kind === 'image' ? `![${name}](${file.url})` : `[${name}](${file.url})`;
+    }
+    if (format === 'html') {
+      return file.kind === 'image'
+        ? `<img src="${file.url}" alt="${name}" />`
+        : `<a href="${file.url}">${name}</a>`;
+    }
+    return file.url;
+  }).join('\n');
+}
+
 async function moveKeys(keys) {
   if (!keys.length) return;
   if (!(await ensureAuthed())) return;
-  const choice = prompt(
-    `移动 ${keys.length} 个文件到文件夹：\n填写路径（留空=根目录）\n已有：${(state.folders || []).slice(0, 12).join(' · ') || '无'}`,
-    state.galleryFolder || state.uploadFolder || '',
-  );
+  const preset = state.galleryFolder || state.uploadFolder || '';
+  const choice = await openDialog({
+    title: `移动 ${keys.length} 个文件`,
+    html: `
+      <label class="field-label" for="dialog-folder-input">目标文件夹（留空为根目录）</label>
+      <input id="dialog-folder-input" class="field" value="${escapeAttr(preset)}" placeholder="产品/春季" />
+      <div id="dialog-folder-list" class="dialog-folder-list"></div>`,
+    confirmText: '移动',
+    getValue: () => document.getElementById('dialog-folder-input')?.value ?? '',
+    onMount: () => {
+      const list = document.getElementById('dialog-folder-list');
+      const input = document.getElementById('dialog-folder-input');
+      const paint = () => renderFolderChoices(list, {
+        current: input?.value || '',
+        emptyLabel: '根目录',
+      });
+      paint();
+      list?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-folder]');
+        if (!btn || !list.contains(btn)) return;
+        if (input) input.value = btn.dataset.folder || '';
+        paint();
+      });
+    },
+  });
   if (choice == null) return;
-  const folder = choice.trim();
+  const folder = String(choice).trim();
   const { res, data } = await api('/api/move', {
     method: 'POST',
     body: JSON.stringify({ keys, folder }),
@@ -887,10 +1120,13 @@ async function loadGallery(reset = false) {
     if (!reset && state.cursor) params.set('cursor', state.cursor);
     const folder = (state.galleryFolder || '').trim();
     const kind = (els.galleryKind?.value || state.galleryKind || '').trim();
+    const query = (els.galleryQuery?.value || state.galleryQuery || '').trim();
     state.galleryFolder = folder;
     state.galleryKind = kind;
+    state.galleryQuery = query;
     if (folder) params.set('folder', folder);
     if (kind) params.set('kind', kind);
+    if (query) params.set('q', query);
 
     const { res, data } = await api(`/api/list?${params}`);
     if (!res.ok || !data.success) {
@@ -1013,8 +1249,19 @@ function bindEvents() {
     showToast(`已创建：${data.folder || name}`);
     await loadFolders({ withStats: true });
   });
-  els.uploadFolder?.addEventListener('change', () => {
-    state.uploadFolder = els.uploadFolder.value;
+  els.uploadFolderBtn?.addEventListener('click', () => {
+    if (state.uploadFolderOpen) closeUploadFolderMenu();
+    else openUploadFolderMenu();
+  });
+  els.uploadFolderSearch?.addEventListener('input', () => renderUploadFolderList());
+  els.uploadFolderList?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-folder]');
+    if (!btn || !els.uploadFolderList.contains(btn)) return;
+    setUploadFolder(btn.dataset.folder || '');
+  });
+  els.btnClearResults?.addEventListener('click', () => {
+    els.results.innerHTML = '';
+    els.btnClearResults.classList.add('hidden');
   });
   els.galleryFolderBtn?.addEventListener('click', () => {
     if (state.galleryFolderOpen) closeGalleryFolderMenu();
@@ -1032,14 +1279,37 @@ function bindEvents() {
     setGalleryFolder(btn.dataset.folder || '');
   });
   document.addEventListener('click', (e) => {
-    if (!state.galleryFolderOpen) return;
-    if (els.galleryFolderPicker?.contains(e.target)) return;
-    closeGalleryFolderMenu();
+    if (state.galleryFolderOpen && !els.galleryFolderPicker?.contains(e.target)) {
+      closeGalleryFolderMenu();
+    }
+    if (state.uploadFolderOpen && !els.uploadFolderPicker?.contains(e.target)) {
+      closeUploadFolderMenu();
+    }
   });
   els.galleryKind?.addEventListener('change', () => {
     state.galleryKind = els.galleryKind.value;
     state.galleryLoaded = false;
     loadGallery(true);
+  });
+  let queryTimer;
+  els.galleryQuery?.addEventListener('input', () => {
+    clearTimeout(queryTimer);
+    queryTimer = setTimeout(() => {
+      state.galleryQuery = els.galleryQuery.value.trim();
+      state.galleryLoaded = false;
+      loadGallery(true);
+    }, 250);
+  });
+  els.btnBatchCopy?.addEventListener('click', () => copyText(selectedLinkText('url')));
+  els.btnBatchMd?.addEventListener('click', () => copyText(selectedLinkText('md')));
+  els.btnBatchHtml?.addEventListener('click', () => copyText(selectedLinkText('html')));
+  els.btnManageUsers?.addEventListener('click', () => {
+    closeAccountSheet();
+    switchView('users');
+  });
+  els.lightboxClose?.addEventListener('click', closeLightbox);
+  els.lightbox?.addEventListener('click', (e) => {
+    if (e.target === els.lightbox) closeLightbox();
   });
   els.batchSelectAll?.addEventListener('change', () => {
     const on = els.batchSelectAll.checked;
@@ -1136,8 +1406,20 @@ function bindEvents() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if (els.lightbox && !els.lightbox.hidden) {
+      closeLightbox();
+      return;
+    }
+    if (els.dialogOverlay && !els.dialogOverlay.hidden) {
+      els.dialogCancel?.click();
+      return;
+    }
     if (state.galleryFolderOpen) {
       closeGalleryFolderMenu();
+      return;
+    }
+    if (state.uploadFolderOpen) {
+      closeUploadFolderMenu();
       return;
     }
     if (!els.authOverlay.hidden) closeAccountSheet();
@@ -1146,6 +1428,7 @@ function bindEvents() {
 
 bindEvents();
 renderGalleryCrumbs();
+renderUploadTarget();
 refreshMe().catch(() => {
   document.body.classList.remove('is-booting');
   showLoginScreen();
